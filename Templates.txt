@@ -1,0 +1,61 @@
+==>:Class<<< 
+
+# IMPORTS
+import tkinter as tk
+import json
+import os
+
+# Application Class
+class TkinterApp:
+	
+	# Constructor
+	def __init__(self):
+		
+		# Creating the root window
+		self.root = tk.Tk()
+		
+		# Setting the root window parameters
+		self.root.title("{}")
+		self.root.geometry("{}x{}+{}+{}")
+		
+		# Window variables
+		self.window_widgets = {{}} # Widget Name ==> Widget 
+		self.tkinter_variables = {{}} # Variable Name ==> Tkinter Variable
+		self.style_sheet = {{}} # Widget Name ==> Styling
+
+		# Calling the window setup functions
+		self.loadStyleSheet()
+==>:Setup Funcs Call<<<
+
+		self.{}()
+==>:Sheet Load Func<<<
+
+
+	# Loading the style sheet for the widgets
+	def loadStyleSheet(self):
+		path = os.path.join(os.path.dirname(__file__), "{}")
+		
+		# Opening the json file and loading it into the style_sheet variable
+		with open(path, "r") as sheet:
+			data = json.load(sheet)
+			self.style_sheet =  data
+
+==>:Function<<<
+
+	def {}(self):	
+==>:Widget Creation<<<
+
+
+		# Creating '{}' Widget
+		{} = tk.{}({}, self.style_sheet["{}"])
+		{}.place(relx={}, rely={}, relwidth={}, relheight={})
+==>:Widget Append<<<
+			self.window_widgets.update({{"{}": {}}})
+==>:App Call<<<
+
+
+# Running the Application
+if __name__ == "__main__":
+	app = TkinterApp()
+	app.root.mainloop()
+

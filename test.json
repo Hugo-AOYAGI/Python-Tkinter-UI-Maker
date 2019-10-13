@@ -1,0 +1,15 @@
+{
+    "button0": {
+        "bg": "red",
+        "fg": "black"
+    },
+    "button1": {
+        "bg": "blue",
+        "fg": "red"
+    },
+    "button2": {
+        "bg": "red",
+        "fg": "green",
+        "text": "lol"
+    }
+}
