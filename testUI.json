@@ -1,0 +1,124 @@
+{
+    "assets_path": "C:/Users/aoyag/Desktop/Codes/Python/UI Maker/assets",
+    "widget_names": [
+        "root",
+        "Test Button",
+        "Label2"
+    ],
+    "root_options": {
+        "title": "Tkinter App",
+        "width": "1100",
+        "height": "600",
+        "xpos": "0",
+        "ypos": "0"
+    },
+    "code": {
+        "tkVars": {},
+        "standalones": [
+            "Label2"
+        ],
+        "funcs": {
+            "None": [
+                "Test Button",
+                "Label2"
+            ]
+        },
+        "parents": {
+            "root": [
+                "Test Button",
+                "Label2"
+            ]
+        }
+    },
+    "sheet": {
+        "Test Button": {
+            "styling": {
+                "activebackground": "SystemButtonFace",
+                "activeforeground": "SystemButtonText",
+                "anchor": "center",
+                "background": "SystemButtonFace",
+                "bd": "2",
+                "bg": "SystemButtonFace",
+                "bitmap": "",
+                "borderwidth": "2",
+                "command": "",
+                "compound": "none",
+                "cursor": "",
+                "default": "disabled",
+                "disabledforeground": "SystemDisabledText",
+                "fg": "SystemButtonText",
+                "font": "TkDefaultFont",
+                "foreground": "SystemButtonText",
+                "height": 0,
+                "highlightbackground": "SystemButtonFace",
+                "highlightcolor": "SystemWindowFrame",
+                "highlightthickness": "1",
+                "image": "",
+                "justify": "center",
+                "overrelief": "",
+                "padx": "1",
+                "pady": "1",
+                "relief": "raised",
+                "repeatdelay": 0,
+                "repeatinterval": 0,
+                "state": "normal",
+                "takefocus": "",
+                "text": "",
+                "textvariable": "",
+                "underline": -1,
+                "width": 0,
+                "wraplength": "0"
+            },
+            "position": [
+                0,
+                0,
+                0.2,
+                0.2
+            ]
+        },
+        "Label2": {
+            "styling": {
+                "activebackground": "SystemButtonFace",
+                "activeforeground": "SystemButtonText",
+                "anchor": "center",
+                "background": "SystemButtonFace",
+                "bd": "2",
+                "bg": "SystemButtonFace",
+                "bitmap": "",
+                "borderwidth": "2",
+                "compound": "center",
+                "cursor": "",
+                "disabledforeground": "SystemDisabledText",
+                "fg": "SystemButtonText",
+                "font": "TkDefaultFont",
+                "foreground": "SystemButtonText",
+                "height": 0,
+                "highlightbackground": "SystemButtonFace",
+                "highlightcolor": "SystemWindowFrame",
+                "highlightthickness": "0",
+                "image": "pyimage2",
+                "justify": "center",
+                "padx": "1",
+                "pady": "1",
+                "relief": "flat",
+                "state": "normal",
+                "takefocus": "0",
+                "text": "lol wtf",
+                "textvariable": "",
+                "underline": -1,
+                "width": 0,
+                "wraplength": "0"
+            },
+            "position": [
+                "0.2",
+                "0",
+                "0.2",
+                "0.2"
+            ]
+        }
+    },
+    "types": {
+        "Test Button": "Button",
+        "Label2": "Label"
+    }
+}

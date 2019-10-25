@@ -8,19 +8,20 @@ import time
 import json
 import inspect
 import re
+from PIL import Image, ImageTk
 
 """
  TODO :
    - Option to save widget styling (All options or styling only)
    - Option to write to a stylesheet:
         Eventually style_sheet editor
-   - Option to save a UI
+   - Option to save a UI DONE
    - UI loading feature
    - Fix code writing bugs:
         Gotta find the bugs first ..
    - Add option for short style sheet:
         Style Sheet where only changed parameters are written
-   - Assets folder feature:
+   - Assets folder feature: DONE
         Add a folder where you can put assets images to re-use in UI
 """
 
@@ -37,6 +38,10 @@ class UIMaker:
     WIDGET_CUSTOM_PROPS = ["relx", "rely", "relwidth", "relheight"]
 
     WIDGET_SHORTS = ["frame", "lblframe", "canv", "lbl", "msg", "text", "btn", "entry", "listbox", "menubtn", "optionmenu", "checkbtn", "radiobtn", "spinbox", "menu", "pannedwin"]
+
+    NON_STYLE_PROPS = ["scrollregion", "xscrollcommand", "xscrollincrement", "yscrollcommand", "yscrollincrement", "image", "textvariable", "command", "invalidcommand", "invcmd", "validatecommand", "vcmd", "listvariable", "variable", "menu", "selectimage", "tristateimage"]
+
+    SPECIAL_PROPS = ["image", "command", "validatecommand", "vcmd", "selectimage", "tristateimage"]
 
     def __init__(self):
         # Setting up the main window
@@ -56,6 +61,9 @@ class UIMaker:
         self.widget_position = {} # Widget Name ==> Position and Size Tuple
         self.pop_win = False
         self.old_ratio = 0
+        self.assets_path = "None"
+        self.assets_images = {} # Image Name ==> PhotoImage Object
+        self.widget_images = {} # Widget Name ==> Image Name
 
         
 
@@ -154,9 +162,13 @@ class UIMaker:
         exp_btn = tk.Button(frame, text="Export StyleSheet", command=self.exportStyleSheet)
         exp_btn.place(relx=0.65, rely=0, relwidth=0.15, relheight=1)
 
+        # Adding button to add an assets folder
+        assets_btn = tk.Button(frame, text="Assets Folder", command=self.addAssetsFolder)
+        assets_btn.place(relx=0.80, rely=0, relwidth=0.15, relheight=1)
+
         # Placeholder
         open_btn = tk.Button(frame)
-        open_btn.place(relx=0.80, rely=0, relwidth=0.20, relheight=1)
+        open_btn.place(relx=0.95, rely=0, relwidth=0.20, relheight=1)
 
     # Creates the widget bar where you can select all the widgets to place
     def setupWidgetsBar(self):
@@ -175,6 +187,43 @@ class UIMaker:
                 btn = tk.Button(frame, text=widget_name, command=lambda x=widget_name: self.getWidgetParameters(x))
                 btn.place(relx=i/(n_widgets/2), rely=j*0.5, relwidth=1/(n_widgets/2), relheight=0.5)
     
+    # Ask the user to add a new assets folder
+    def addAssetsFolder(self, path = 0):
+        self.assets_images = {}
+        if path == "None":
+            return
+        # Create the dialog window
+        dir_ = askfile.askdirectory() if not path else path
+
+        if not dir_:
+            return 
+
+        self.assets_path = dir_
+
+        # Loop through the images in the assets folder
+        files = self.loopThroughDir(dir_)
+
+        print(files)
+
+        for path in files:
+            if path[-4::] in [".png", ".PNG", ".jpg", ".JPG", ".jpeg", ".JPEG", ".gif", ".GIF"]:
+                img = Image.open(os.path.join(dir_, path))
+                self.assets_images.update({path: ImageTk.PhotoImage(img)})
+
+                
+
+                
+    # Returns a list of all the files from a directory
+    def loopThroughDir(self, dir_):
+        files = []
+        for filename in os.listdir(dir_):
+            if os.path.isdir(filename):
+                files += self.loopThroughDir(filename)
+            else:
+                files.append(filename)
+        return files
+        
+
     # Asks for the widget parameters such as parent or name
     def askAddFunction(self):
         if self.pop_win:
@@ -274,7 +323,7 @@ class UIMaker:
             names = self.root_options.keys()
             values = self.root_options.values()
             
-            self.createWidgetPropertiesInputs(names, values)
+            self.createWidgetPropertiesInputs(names, values, [])
         else:
         # Checks if the widget is any other widget
             # Adding the custom properties
@@ -284,19 +333,34 @@ class UIMaker:
             values = [pos[0], pos[1], pos[2], pos[3]]
 
             names += list(selected.keys())
-            values += [selected[key] for key in list(selected.keys())]
+
+            # List for properties with special pop up inputs (ex: image, command)
+            popup_props = []
+
+            # Remove the non style properties to then add them in a separate list for pop up input properties
+            for name in names:
+                if name in UIMaker.NON_STYLE_PROPS:
+                    names.remove(name)
+                    if name in UIMaker.SPECIAL_PROPS:
+                        popup_props.append(name)
+                    
+
+            values += [selected[key] for key in filter(lambda x: x not in UIMaker.NON_STYLE_PROPS, list(selected.keys()))]
             
-            self.createWidgetPropertiesInputs(names, values)
+            self.createWidgetPropertiesInputs(names, values, popup_props)
             
     # Creates all the inputs for the widget properties
-    def createWidgetPropertiesInputs(self, names, values, types = 0):
+    def createWidgetPropertiesInputs(self, names, values, popup_props, types = 0):
 
         self.prop_vars = {}
         
         for child in self.props_frame.winfo_children():
             child.destroy()
         
+        last_i = 0
+        
         for i, name in enumerate(names):
+            last_i = i
             w = 0.33 if types != 0 else 0.5
 
             # Creating the name label
@@ -323,13 +387,65 @@ class UIMaker:
             self.input_fields.update({name: entry})
             n = 1 if types == 0 else 2
             entry.place(relx=w*n, rely=0.02*i, relwidth=w, relheight=0.02)
+        
+        # Adding inputs for commands and images properties
+        for i, name in enumerate(popup_props):
+            
+            if name in ["image", "tristateimage", "selectimage"]:
+                btn = tk.Button(self.props_frame, text=name, command=lambda x=name: self.widgetImageAsk(x))
+                btn.place(relx=0, rely=0.02*(i+last_i), relwidth=1, relheight=0.02)
+            
+            if name in ["command", "validatecommand", "vcmd"]:
+                btn = tk.Button(self.props_frame, text=name, command=lambda x=name: self.widgetCommandAsk(x))
+                btn.place(relx=0, rely=0.02*(i+last_i), relwidth=1, relheight=0.02)
+            
+    
+    def widgetImageAsk(self, name):
+        # Checks if a pop up window is already opened
+        if self.pop_win:
+            msgbox.showwarning("Warning","Please close or confirm the previous Pop Up before opening another one.")
+            return 0
+        
+        if len(self.assets_images.keys()) == 0:
+            msgbox.showwarning("Warning","No images have been added to the assets folder !")
+            return 0
+        
 
-    def deleteWidget(self):
-        if self.selected_widget_name.get() == "root":
+        self.pop_win = PopUp(self.root, "Choose an Image for the widget", self.updateWidgetImage, name)
+        self.pop_win.addInput("OptionMenu", "Widget Image", self.assets_images.keys())
+        self.pop_win.addCloseFunc(self.pop_up_close)
+
+    def widgetCommandAsk(self, name):
+        # Checks if a pop up window is already opened
+        if self.pop_win:
+            msgbox.showwarning("Warning","Please close or confirm the previous Pop Up before opening another one.")
+            return 0
+        
+        self.pop_win = PopUp(self.root, "Choose a command for the widget", self.updateWidgetCommand, name)
+    
+    def updateWidgetImage(self, name, variables):
+        widg = self.user_widgets[self.selected_widget_name.get()]
+        widg[name] = self.assets_images[variables["Widget Image"].get()]
+
+        # Updating the images dict
+        if self.selected_widget_name.get() not in self.widget_images.keys():
+            self.widget_images.update({self.selected_widget_name.get(): self.assets_images[variables["Widget Image"].get()]})
+        else:
+            self.widget_images[self.selected_widget_name.get()] = self.assets_images[variables["Widget Image"].get()]
+
+        self.pop_win = 0
+
+    def updateWidgetCommand(self, event, variables):
+        pass
+        
+
+    def deleteWidget(self, widg = False):
+        to_delete = self.selected_widget_name.get() if not widg else widg
+        if to_delete == "root":
             msgbox.showwarning('Warning', "Can't delete the root window or else you won't have an app")
             return 0
         # Delete the widget's children if there are
-        children = self.user_widgets[self.selected_widget_name.get()].winfo_children()
+        children = self.user_widgets[to_delete].winfo_children()
 
         keys_to_kill = []
 
@@ -342,18 +458,150 @@ class UIMaker:
             del self.user_widgets[key]
 
         # Delete the widget itself
-        self.user_widgets[self.selected_widget_name.get()].destroy()
-        del self.user_widgets[self.selected_widget_name.get()]
+        self.user_widgets[to_delete].destroy()
+        del self.user_widgets[to_delete]
 
         # Reset the widget option menu
         self.selected_widget_name.set("root")
         self.refreshOptionMenu()
     
     def saveUI(self):
-        pass
+        if self.problem_count > 0:
+            msgbox.showwarning("Warning", "Please fix all the current problems before trying to save the UI !")
+
+
+        # Create the json file to save the UI
+        UI = {}
+
+        # Save the assets folder location
+        UI["assets_path"] = self.assets_path
+
+        self.sheet = {}
+
+        # Creating the stylesheet
+        for widg_name in filter(lambda x: x!="root", self.user_widgets.keys()):
+            # Retrieve widget position
+            pos = self.widget_position[widg_name]
+
+            # Retrieve widget properties
+            props_names = self.user_widgets[widg_name].keys()
+            vals = [self.user_widgets[widg_name][prop] for prop in props_names]
+            styling = {props_names[i]: vals[i] for i in range(len(vals))}
+
+            # Handle special case
+            for key, val in styling.items():
+                if type(val) != str and type(val) != int and type(val) != float:
+                    styling[key] = styling[key].string
+
+            # Update sheet
+            self.sheet.update({widg_name: {"styling": styling, "position": pos}})
+        
+        # Save the widget names and properties in json
+
+        UI["widget_names"] = list(self.user_widgets.keys())
+
+        UI["root_options"] = self.root_options
+
+        # Save the code dict
+        UI["code"] = self.code
+
+        UI["sheet"] = self.sheet
+
+        UI["types"] = {}
+
+        # Saving the class of each widget
+        for widget in UI["widget_names"]:
+            if widget != "root":
+                UI["types"].update({widget: self.user_widgets[widget].winfo_class()})
+
+
+        path_ = askfile.asksaveasfile(defaultextension=".json")
+
+        # Save the ui in a json file
+        with open(path_.name, "w") as ui_file:
+            json.dump(UI, ui_file)
 
     def openUI(self):
-        pass
+        path_ = askfile.askopenfile(defaultextension=".json")
+
+        if not path_:
+            return
+
+        with open(path_.name, "r") as ui_file:
+            # Load the json file
+            ui_dict = json.load(ui_file)
+            
+            # Update the window variables
+            self.code = ui_dict["code"]
+            self.types = ui_dict["types"]
+            self.root_options = ui_dict["root_options"]
+            self.changeWindowSize()
+
+            # Add the assets folder
+            self.addAssetsFolder(ui_dict["assets_path"])
+
+            layer_parents = ["root"]
+            new_layer_parents = []
+            seen_widgets = ["root"]
+
+            # Delete all the current widgets
+            to_delete = list(filter(lambda x: x != "root", self.user_widgets.keys()))
+            for widg in to_delete:
+                self.deleteWidget(widg)
+
+
+            # Go through all the layers and hierarchy of the widget tree
+            while len(seen_widgets) < len(ui_dict["widget_names"]):
+
+                # Loop through the parents of the current layer                
+                for parent in layer_parents:
+                    new_layer_parents = []
+                    if parent in self.code["parents"]:
+                        
+                        # Loop through the children of that parent
+                        for widget in self.code["parents"][parent]:
+                            if widget in seen_widgets:
+                                continue
+                            # Setting up their properties
+                            variables = {"Widget Name": tk.StringVar(), "Is Standalone": tk.BooleanVar(), "Widget Parent": tk.StringVar(), "Created in Function": tk.StringVar()}
+                        
+                            # Getting the values of their parameters
+                            variables["Widget Parent"].set(parent)
+                            variables["Widget Name"].set(widget)
+                            variables["Is Standalone"].set(True if widget in self.code["standalones"] else False)
+
+                            # Finding their creation function
+                            variables["Created in Function"].set(self.findCreationFunc(widget))
+
+                            new_layer_parents.append(widget)
+                            seen_widgets.append(widget)
+                            
+                            # Place the widget
+                            self.placeWidget(self.types[widget], variables)
+                
+                # Setting up the new layer
+                layer_parents = new_layer_parents
+            
+            for widget in filter(lambda x: x!="root", self.user_widgets.keys()):
+                self.updateWidgetPropertiesFromSheet(widget, ui_dict["sheet"][widget])
+
+            print(self.user_widgets)
+
+    def updateWidgetPropertiesFromSheet(self, widg_name, sheet):
+        for prop in sheet["styling"].keys():
+            self.user_widgets[widg_name][prop] = sheet["styling"][prop]
+        self.reloadProperties("relwidth", widg_name, sheet["position"][0], sheet["position"][1], sheet["position"][2], sheet["position"][3])
+
+    def findCreationFunc(self, widget):
+        for func in self.code["funcs"].keys():
+            if widget in self.code["funcs"][func]:
+                return func
+            
+    def findParent(self, widget):
+        for parent in self.code["parents"].keys():
+            if widget in self.code["parents"][parent]:
+                return parent
+    
 
     def askSaveStyling(self):
         # Checks if a pop up window is already opened
@@ -439,7 +687,7 @@ class UIMaker:
     def exportStyleSheet(self):
         path = askfile.asksaveasfile()
 
-        with open(path, "w") as new_sheet:
+        with open(path.name, "w") as new_sheet:
             json.dump(self.style_sheet, new_sheet)
 
     def getChangedProperties(self, widg_name):
@@ -560,7 +808,7 @@ class UIMaker:
         code += templates["Sheet Load Func"].format("sheet_test.json")
 
         # Looping through the functions
-        print(variables)
+
         for func in variables["sorter_list"]:
             if func == "None":
                 continue
@@ -659,8 +907,7 @@ class UIMaker:
     
     # Places the widget that was selected in the widget selection bar.
     def placeWidget(self, name, variables):
-
-
+        
         widget_name = variables["Widget Name"].get()
         args = ""
 
@@ -685,7 +932,6 @@ class UIMaker:
         self.widget_position.update({widget_name: (0, 0, 0.2, 0.2)})
 
         # Add the widget to the code writing variables
-        print(variables["Is Standalone"].get())
         if variables["Is Standalone"].get() == "1":
             self.code["standalones"].append(widget_name)
 
@@ -694,7 +940,6 @@ class UIMaker:
 
         self.refreshOptionMenu()
 
-        print(self.code)
 
         del self.pop_win
         self.pop_win = False
@@ -743,15 +988,21 @@ class UIMaker:
         try:
             # If the Property is a size or pos property, replace widget
             if name in UIMaker.WIDGET_CUSTOM_PROPS:
-                self.user_widgets[self.selected_widget_name.get()].place_forget()
+                widg_name = self.selected_widget_name.get() if not args else args[0]
+                print(self.user_widgets[widg_name])
+                self.user_widgets[widg_name].place_forget()
                 # Get the position and size
-                w, h, x, y = self.prop_vars["relwidth"].get(), self.prop_vars["relheight"].get(), self.prop_vars["relx"].get(), self.prop_vars["rely"].get()
-                self.user_widgets[self.selected_widget_name.get()].place(relx=x, rely=y, relwidth=w, relheight=h)
+                if len(args) < 2:
+                    w, h, x, y = self.prop_vars["relwidth"].get(), self.prop_vars["relheight"].get(), self.prop_vars["relx"].get(), self.prop_vars["rely"].get()
+                else:
+                    x, y, w, h = args[1], args[2], args[3], args[4]
+                self.user_widgets[widg_name].place(relx=x, rely=y, relwidth=w, relheight=h)
                 # Update dictionary
-                self.widget_position[self.selected_widget_name.get()] = (x, y, w, h)
-                if self.input_fields[name]["bg"] == "red":
-                    self.input_fields[name]["bg"] = "white"
-                    self.problem_count -= 1
+                self.widget_position[widg_name] = (x, y, w, h)
+                if not args:
+                    if self.input_fields[name]["bg"] == "red":
+                        self.input_fields[name]["bg"] = "white"
+                        self.problem_count -= 1
             else:
             # Else change the actual property
                 self.user_widgets[self.selected_widget_name.get()][name] = self.prop_vars[name].get()
@@ -838,7 +1089,7 @@ class PopUp:
         # Creating the PopUp window
         self.top = tk.Toplevel(root)
         self.top.title(name)
-        self.top.geometry("600x400")
+        self.top.geometry("450x300")
 
         self.parent = root
 
@@ -867,13 +1118,16 @@ class PopUp:
         n_inputs = len(self.variables.keys()) - 1
         
         # Creates the input label and widget
-        lbl = tk.Label(self.top, text=name)
-        lbl.place(relx=0, rely=0.1*n_inputs, relwidth=0.3, relheight=0.1)
+        lbl = tk.Label(self.top, text=name, relief="raised")
+        lbl.place(relx=0, rely=0.1*n_inputs, relwidth=0.5, relheight=0.1)
 
+        # Entry input for text
         if _type == "Entry":
             input_ = tk.Entry(self.top, textvariable = self.variables[name])
             # Adds the prohibited values if there are 
             self.prohibited_vals.update({name: arg})
+        
+        # Option menu to chose from multiple options
         elif _type == "OptionMenu":
             input_ = tk.OptionMenu(self.top, self.variables[name], "")
             input_['menu'].delete(0, 'end')
@@ -881,22 +1135,25 @@ class PopUp:
             for option in arg:
                 input_['menu'].add_command(label=option, command=tk._setit(self.variables[name], option))
             self.variables[name].set(option)
+
+        # Checkbutton input
         elif _type == "Checkbutton":
             # Create the check button
             input_ = tk.Checkbutton(self.top, variable=self.variables[name])
             self.variables[name].set("0")
-        
-        if _type == "sorter":
+
+        # Sorter, sort multiple values in order
+        elif _type == "sorter":
             # Creating the "move up" buttons
             self.variables.update({"sorter_list": arg[1]})
             self.variables[name].set("0")
-            print(arg)
             self.updateSorter(arg[1])
             lbl = tk.Label(self.top, text=arg[0])
             lbl.place(relx=0, rely=0, relwidth=1, relheight=0.1)
-        else:
+        
+        if _type != "sorter":
             # Placing the input
-            input_.place(relx=0.4, rely=0.1*n_inputs, relwidth=0.5, relheight=0.1)
+            input_.place(relx=0.5, rely=0.1*n_inputs, relwidth=0.5, relheight=0.1)
     
     def addCloseFunc(self, func):
         self.top.protocol("WM_DELETE_WINDOW", func)
@@ -912,7 +1169,6 @@ class PopUp:
     def moveUpSorter(self, i):
         if i == 0:
             return 0
-        print(i)
         temp = self.variables["sorter_list"][i-1]
         self.variables["sorter_list"][i-1] = self.variables["sorter_list"][i]
         self.variables["sorter_list"][i] = temp
