@@ -15,14 +15,9 @@ from PIL import Image, ImageTk
    - Option to save widget styling (All options or styling only)
    - Option to write to a stylesheet:
         Eventually style_sheet editor
-   - Option to save a UI DONE
-   - UI loading feature
-   - Fix code writing bugs:
-        Gotta find the bugs first ..
+   - Finish code writing
    - Add option for short style sheet:
         Style Sheet where only changed parameters are written
-   - Assets folder feature: DONE
-        Add a folder where you can put assets images to re-use in UI
 """
 
 # Creates the window for the UI Builder
@@ -61,6 +56,7 @@ class UIMaker:
         self.widget_position = {} # Widget Name ==> Position and Size Tuple
         self.pop_win = False
         self.old_ratio = 0
+        self.ui_json_file_path = ""
         self.assets_path = "None"
         self.assets_images = {} # Image Name ==> PhotoImage Object
         self.widget_images = {} # Widget Name ==> Image Name
@@ -93,82 +89,45 @@ class UIMaker:
         self.setupWidgetPropsBar()
         self.setupMenuBar()
 
-
-        # FOR TEST PURPOSES
-        var1 = tk.StringVar()
-        var1.set("Test Button")
-        var2 = tk.StringVar()
-        var2.set("root")
-        var3 = tk.StringVar()
-        var3.set("0")
-        var4 = tk.StringVar()
-        var4.set("None")
-        self.placeWidget("Button", {"Widget Name": var1, "Widget Parent": var2, "Is Standalone": var3, "Created in Function": var4})
-        
-        """
-        The Window contains 3 main parts : 
-            - the Canvas where the UI is drawn
-            - the Properties panel to change the widget styling
-            - the Widget selection bar to choose widgets to place
-
-        ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
-        ░░╔══════╦═════════════════════╗░░
-        ░░║░░░░░░║░░░░░░░░░░░░░░░░░░░░░║░░
-        ░░║░░P░░░║░░░░░░░░░░░░░░░░░░░░░║░░
-        ░░║░░R░░░║░░░░░░░░░░░░░░░░░░░░░║░░
-        ░░║░░O░░░║░░░  UI Canvas  ░░░░░║░░
-        ░░║░░P░░░║░░░░░░░░░░░░░░░░░░░░░║░░
-        ░░║░░E░░░║░░░░░░░░░░░░░░░░░░░░░║░░
-        ░░║░░R░░░║░░░░░░░░░░░░░░░░░░░░░║░░
-        ░░║░░T░░░║░░░░░░░░░░░░░░░░░░░░░║░░
-        ░░║░░I░░░╠═════════════════════╣░░
-        ░░║░░E░░░║░░░░░░░░░░░░░░░░░░░░░║░░
-        ░░║░░S░░░║░░░░ Widget Bar ░░░░░║░░
-        ░░║░░░░░░║░░░░░░░░░░░░░░░░░░░░░║░░
-        ░░╚══════╩═════════════════════╝░░
-        ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
-        """
-
     # Creates the upper menu of the window
     def setupMenuBar(self):
-        frame = tk.Frame(self.root, bg="#DFDFDF")
-        frame.place(relx=0.25, rely=0, relwidth=0.75, relheight=0.05)
 
-        # Adding button to add new functions to the code
-        func_btn = tk.Button(frame, text="New Function", command=self.askAddFunction)
-        func_btn.place(relx=0, rely=0, relwidth=0.10, relheight=1)
+        # Create the menu of the root
+        self.menu = tk.Menu(self.root)
+        
+        # File Cascade Menu: Save As, Save, Open, Reset
+        filemenu = tk.Menu(self.menu, tearoff=False)
+        filemenu.add_command(label="Save as", command=self.saveUI)
+        filemenu.add_command(label="Save", command=self.quickSave, accelerator="Ctrl+S")
+        filemenu.add_separator()
+        filemenu.add_command(label="Open file", command=self.openUI, accelerator="Ctrl+O")
+        filemenu.add_separator()
+        filemenu.add_command(label="Reset UI", command=self.resetUI)
 
-        # Adding button to write the code
-        write_btn = tk.Button(frame, text="Write Code", command=self.askWriteCode)
-        write_btn.place(relx=0.10, rely=0, relwidth=0.10, relheight=1)
+        self.menu.add_cascade(label="File", menu=filemenu)
 
-        # Adding button to save the UI
-        save_btn = tk.Button(frame, text="Save UI", command=self.saveUI)
-        save_btn.place(relx=0.20, rely=0, relwidth=0.10, relheight=1)
+        # Edit Cascade Menu: New Function, Write Code
+        editmenu = tk.Menu(self.menu, tearoff=False)
+        editmenu.add_command(label="New Function", command=self.askAddFunction, accelerator="Ctrl+F")
+        editmenu.add_separator()
+        editmenu.add_command(label="Write Code", command=self.askWriteCode)
 
-        # Adding button to open a UI
-        open_btn = tk.Button(frame, text="Open UI", command=self.openUI)
-        open_btn.place(relx=0.30, rely=0, relwidth=0.10, relheight=1)
+        self.menu.add_cascade(label="Edit", menu=editmenu)
 
-        # Adding button to reset the UI
-        reset_btn = tk.Button(frame, text="Reset", command=self.resetUI)
-        reset_btn.place(relx=0.40, rely=0, relwidth=0.10, relheight=1)
+        # Style Cascade Menu: Import Style Sheet, Export StyleSheet
+        stylemenu = tk.Menu(self.menu, tearoff=False)
+        stylemenu.add_command(label="Import StyleSheet", command=self.importStyleSheet)
+        stylemenu.add_command(label="Export StyleSheet", command=self.exportStyleSheet)
+        stylemenu.add_command(label="Add Assets Folder", command=self.addAssetsFolder)
 
-        # Adding button to add a stylesheet to the UI
-        add_btn = tk.Button(frame, text="Add StyleSheet", command=self.importStyleSheet)
-        add_btn.place(relx=0.50, rely=0, relwidth=0.15, relheight=1)
+        self.menu.add_cascade(label="Style", menu=stylemenu)
 
-        # Adding button to export a stylesheet from the UI
-        exp_btn = tk.Button(frame, text="Export StyleSheet", command=self.exportStyleSheet)
-        exp_btn.place(relx=0.65, rely=0, relwidth=0.15, relheight=1)
+        self.root.config(menu=self.menu)
 
-        # Adding button to add an assets folder
-        assets_btn = tk.Button(frame, text="Assets Folder", command=self.addAssetsFolder)
-        assets_btn.place(relx=0.80, rely=0, relwidth=0.15, relheight=1)
-
-        # Placeholder
-        open_btn = tk.Button(frame)
-        open_btn.place(relx=0.95, rely=0, relwidth=0.20, relheight=1)
+        # Adding shortcuts
+        self.root.bind_all("<Control-s>", self.quickSave)
+        self.root.bind_all("<Control-o>", self.openUI)
+        self.root.bind_all("<Control-f>", self.askAddFunction)
 
     # Creates the widget bar where you can select all the widgets to place
     def setupWidgetsBar(self):
@@ -188,31 +147,24 @@ class UIMaker:
                 btn.place(relx=i/(n_widgets/2), rely=j*0.5, relwidth=1/(n_widgets/2), relheight=0.5)
     
     # Ask the user to add a new assets folder
-    def addAssetsFolder(self, path = 0):
+    def addAssetsFolder(self, dir_ = 0):
         self.assets_images = {}
-        if path == "None":
+        if dir_ == "None":
             return
         # Create the dialog window
-        dir_ = askfile.askdirectory() if not path else path
+        dir_ = askfile.askdirectory() if not dir_ else dir_
 
         if not dir_:
             return 
 
         self.assets_path = dir_
 
-        # Loop through the images in the assets folder
-        files = self.loopThroughDir(dir_)
+        for filename in os.listdir(dir_):
+            if filename[-4::] in [".png", ".PNG", ".jpg", ".JPG", ".jpeg", ".JPEG", ".gif", ".GIF"]:
+                img = Image.open(os.path.join(dir_, filename))
+                self.assets_images.update({filename: ImageTk.PhotoImage(img)})
 
-        print(files)
-
-        for path in files:
-            if path[-4::] in [".png", ".PNG", ".jpg", ".JPG", ".jpeg", ".JPEG", ".gif", ".GIF"]:
-                img = Image.open(os.path.join(dir_, path))
-                self.assets_images.update({path: ImageTk.PhotoImage(img)})
-
-                
-
-                
+                    
     # Returns a list of all the files from a directory
     def loopThroughDir(self, dir_):
         files = []
@@ -225,7 +177,7 @@ class UIMaker:
         
 
     # Asks for the widget parameters such as parent or name
-    def askAddFunction(self):
+    def askAddFunction(self, *args):
         if self.pop_win:
             msgbox.showwarning("warning","Please close or confirm the previous Pop Up before opening another one.")
             return 0
@@ -465,7 +417,7 @@ class UIMaker:
         self.selected_widget_name.set("root")
         self.refreshOptionMenu()
     
-    def saveUI(self):
+    def saveUI(self, quick = False):
         if self.problem_count > 0:
             msgbox.showwarning("Warning", "Please fix all the current problems before trying to save the UI !")
 
@@ -514,14 +466,24 @@ class UIMaker:
             if widget != "root":
                 UI["types"].update({widget: self.user_widgets[widget].winfo_class()})
 
+        path_ = askfile.asksaveasfile(defaultextension=".json") if not quick else self.ui_json_file_path
 
-        path_ = askfile.asksaveasfile(defaultextension=".json")
+        if not path_:
+            return
+
+        self.ui_json_file_path = path_.name if not quick else path_
 
         # Save the ui in a json file
-        with open(path_.name, "w") as ui_file:
+        with open(self.ui_json_file_path, "w") as ui_file:
             json.dump(UI, ui_file)
 
-    def openUI(self):
+    def quickSave(self, *args):
+        if self.ui_json_file_path != "":
+            self.saveUI(True)
+        else:
+            self.saveUI()
+
+    def openUI(self, *args):
         path_ = askfile.askopenfile(defaultextension=".json")
 
         if not path_:
@@ -703,7 +665,7 @@ class UIMaker:
         
         # Creating the frame that contains the user UI
         self.ui = tk.Frame(self.root, bg="white")
-        self.ui.place(relx=0.25, rely=0.05, relwidth=0.75, relheight=0.75)
+        self.ui.place(relx=0.25, rely=0.025, relwidth=0.75, relheight=0.75)
 
         self.user_widgets.update({"root": "root_window"})
 
@@ -988,11 +950,10 @@ class UIMaker:
         try:
             # If the Property is a size or pos property, replace widget
             if name in UIMaker.WIDGET_CUSTOM_PROPS:
-                widg_name = self.selected_widget_name.get() if not args else args[0]
-                print(self.user_widgets[widg_name])
+                widg_name = self.selected_widget_name.get() if len(args) == 3 else args[0]
                 self.user_widgets[widg_name].place_forget()
                 # Get the position and size
-                if len(args) < 2:
+                if len(args) == 3:
                     w, h, x, y = self.prop_vars["relwidth"].get(), self.prop_vars["relheight"].get(), self.prop_vars["relx"].get(), self.prop_vars["rely"].get()
                 else:
                     x, y, w, h = args[1], args[2], args[3], args[4]
@@ -1069,7 +1030,7 @@ class UIMaker:
         
         # Replace the UI
         self.ui.place_forget()
-        self.ui.place(relx=0.25+(0.75 - ui_width)/2, rely=0.05+(0.75 - ui_height)/2, relwidth=ui_width, relheight=ui_height)
+        self.ui.place(relx=0.25+(0.75 - ui_width)/2, rely=0.025+(0.75 - ui_height)/2, relwidth=ui_width, relheight=ui_height)
     
     def reloadPosition(self, *args):
         pass
@@ -1098,12 +1059,15 @@ class PopUp:
         self.prohibited_vals = {} # For entry inputs
         self.confirm_function = confirm_function
         self.func_args = func_args
+        self.n_inputs = 0
 
         # Add confirm button
         confirm = tk.Button(self.top, text="Confirm", command=self.confirm)
         confirm.place(relx=0.3, rely=0.9, relwidth=0.4, relheight=0.1)
 
-        root.bind("<Return>", self.confirm)
+        self.top.bind("<Tab>", self.focusNextWindow)
+
+        self.top.bind_all("<Return>", self.confirm)
 
     # Adds an input amongst multiple presets : Entry, OptionMenu, Checkbutton
     def addInput(self, _type, name, arg = []):
@@ -1154,7 +1118,13 @@ class PopUp:
         if _type != "sorter":
             # Placing the input
             input_.place(relx=0.5, rely=0.1*n_inputs, relwidth=0.5, relheight=0.1)
+            if self.n_inputs == 0:
+                input_.focus()
     
+    def focusNextWindow(self, event):
+        event.widget.tk_focusNext().focus()
+        return("break")
+
     def addCloseFunc(self, func):
         self.top.protocol("WM_DELETE_WINDOW", func)
     
@@ -1182,13 +1152,15 @@ class PopUp:
             # Checks if the input is empty
             if self.variables[name].get() == "":
                 msgbox.showwarning("ERROR", "Not all parameters were filled in !")
+                self.top.lift()
                 return 0
 
             # Checks if the value is prohibited
             if name in self.prohibited_vals:
                 if self.variables[name].get() in self.prohibited_vals[name]:
                     msgbox.showwarning("ERROR", "This value for '{}' is prohibited.".format(name))
-                    return 0
+                    self.top.lift()
+                    return 0    
 
         # Return the inpits and call the confirm function that was set up
         self.confirm_function(self.func_args, self.variables)

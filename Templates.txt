@@ -4,6 +4,7 @@
 import tkinter as tk
 import json
 import os
+from PIL import Image, ImageTk
 
 # Application Class
 class TkinterApp:
@@ -19,9 +20,10 @@ class TkinterApp:
 		self.root.geometry("{}x{}+{}+{}")
 		
 		# Window variables
-		self.window_widgets = {{}} # Widget Name ==> Widget 
-		self.tkinter_variables = {{}} # Variable Name ==> Tkinter Variable
-		self.style_sheet = {{}} # Widget Name ==> Styling
+		self.window_widgets = {{}} # Widget Name --> Widget 
+		self.tkinter_variables = {{}} # Variable Name --> Tkinter Variable
+		self.style_sheet = {{}} # Widget Name --> Styling
+		self.assets_dict = {{}} # Image Name --> PhotoImage Object
 
 		# Calling the window setup functions
 		self.loadStyleSheet()
@@ -58,4 +60,37 @@ class TkinterApp:
 if __name__ == "__main__":
 	app = TkinterApp()
 	app.root.mainloop()
+
+==>:Assets Loading<<<
+
+
+	# Loading the style sheet for the widgets
+	def loadAssets(self):
+
+		self.assets_path = "{}"
+
+		for filename in os.listdir(dir_):
+
+			# Check if the file is an image format
+            if filename[-4::] in [".png", ".PNG", ".jpg", ".JPG", ".jpeg", ".JPEG", ".gif", ".GIF"]:
+
+				# Load the image and add it to the assets_dict
+                img = Image.open(os.path.join(dir_, filename))
+                self.assets_dict.update({filename: ImageTk.PhotoImage(img)})
+
+==>:Widget with Image or Command<<<
+
+
+		# Creating '{}' Widget
+		{} = tk.{}({}, self.style_sheet["{}"], {}={})
+		{}.place(relx={}, rely={}, relwidth={}, relheight={})
+
+==>:Option Menu<<<
+
+==>:Widget with Command and Image<<<
+
+
+		# Creating '{}' Widget
+		{} = tk.{}({}, self.style_sheet["{}"], {}={}, {}={})
+		{}.place(relx={}, rely={}, relwidth={}, relheight={})
 
