@@ -1,1 +1,108 @@
-{"assets_path": "None", "widget_names": ["root", "test", "alzk"], "root_options": {"title": "Tkinter App", "width": "0", "height": "600", "xpos": "0", "ypos": "0"}, "code": {"tkVars": {}, "standalones": [], "funcs": {"None": ["test", "alzk"]}, "parents": {"root": ["test", "alzk"]}}, "sheet": {"test": {"styling": {"activebackground": "SystemButtonFace", "activeforeground": "SystemButtonText", "anchor": "center", "background": "red", "bd": "2", "bg": "red", "bitmap": "", "borderwidth": "2", "compound": "none", "cursor": "", "disabledforeground": "SystemDisabledText", "fg": "white", "font": "TkDefaultFont", "foreground": "white", "height": 0, "highlightbackground": "SystemButtonFace", "highlightcolor": "SystemWindowFrame", "highlightthickness": "0", "image": "", "justify": "center", "padx": "1", "pady": "1", "relief": "flat", "state": "normal", "takefocus": "0", "text": "lol", "textvariable": "", "underline": -1, "width": 0, "wraplength": "0"}, "position": ["0.3", "0.4", "0.2", "0.2"]}, "alzk": {"styling": {"activebackground": "SystemButtonFace", "activeforeground": "SystemButtonText", "anchor": "center", "background": "SystemButtonFace", "bd": "2", "bg": "SystemButtonFace", "bitmap": "", "borderwidth": "2", "compound": "none", "cursor": "", "disabledforeground": "SystemDisabledText", "fg": "SystemButtonText", "font": "TkDefaultFont", "foreground": "SystemButtonText", "height": 0, "highlightbackground": "SystemButtonFace", "highlightcolor": "SystemWindowFrame", "highlightthickness": "0", "image": "", "justify": "center", "padx": "1", "pady": "1", "relief": "flat", "state": "normal", "takefocus": "0", "text": "lolz", "textvariable": "", "underline": -1, "width": 0, "wraplength": "0"}, "position": [0, 0, 0.2, 0.2]}}, "types": {"test": "Label", "alzk": "Label"}}
+{
+    "assets_path": "C:/Users/aoyag/Desktop/Codes/Python/UI Maker/assets",
+    "widget_names": [
+        "root",
+        "MainTitle",
+        "Frame1",
+        "Frame2",
+        "img1"
+    ],
+    "root_options": {
+        "title": "Tkinter App",
+        "width": "1600",
+        "height": "900",
+        "xpos": "0",
+        "ypos": "0"
+    },
+    "code": {
+        "tkVars": {},
+        "standalones": [
+            "MainTitle"
+        ],
+        "funcs": {
+            "None": [
+                "MainTitle"
+            ],
+            "Frame1Creation": [
+                "Frame1"
+            ],
+            "Frame2Creation": [
+                "Frame2",
+                "img1"
+            ]
+        },
+        "parents": {
+            "root": [
+                "MainTitle",
+                "Frame1",
+                "Frame2"
+            ],
+            "Frame2": [
+                "img1"
+            ]
+        },
+        "optionMenuVals": {},
+        "optionMenuStringVars": {},
+        "types": {
+            "MainTitle": "Label",
+            "Frame1": "Frame",
+            "Frame2": "Frame",
+            "img1": "Label"
+        },
+        "images": {
+            "img1": "test.gif"
+        },
+        "commands": {}
+    },
+    "sheet": {
+        "MainTitle": {
+            "styling": {
+                "fg": "red",
+                "font": "'Arial', 30",
+                "foreground": "red",
+                "text": "MAIN TITLE"
+            },
+            "position": [
+                "0.2",
+                "0",
+                "0.6",
+                "0.1"
+            ]
+        },
+        "Frame1": {
+            "styling": {
+                "background": "grey",
+                "bg": "grey"
+            },
+            "position": [
+                "0",
+                "0.1",
+                "0.5",
+                "0.9"
+            ]
+        },
+        "Frame2": {
+            "styling": {
+                "background": "#022020",
+                "bg": "#022020"
+            },
+            "position": [
+                "0.5",
+                "0.1",
+                "0.5",
+                "0.9"
+            ]
+        },
+        "img1": {
+            "styling": {
+                "image": "pyimage1"
+            },
+            "position": [
+                "0",
+                "0",
+                "0.6",
+                "0.4"
+            ]
+        }
+    }
+}

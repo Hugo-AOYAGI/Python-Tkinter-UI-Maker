@@ -1,4 +1,4 @@
-==>:Class<<< 
+==>:class<<< 
 
 # IMPORTS
 import tkinter as tk
@@ -27,10 +27,11 @@ class TkinterApp:
 
 		# Calling the window setup functions
 		self.loadStyleSheet()
-==>:Setup Funcs Call<<<
+		self.loadAssets()
+==>:func_call<<<
 
 		self.{}()
-==>:Sheet Load Func<<<
+==>:sheet_load_func<<<
 
 
 	# Loading the style sheet for the widgets
@@ -42,18 +43,24 @@ class TkinterApp:
 			data = json.load(sheet)
 			self.style_sheet =  data
 
-==>:Function<<<
+==>:func<<<
 
 	def {}(self):	
-==>:Widget Creation<<<
+==>:creation_dict<<<
 
 
 		# Creating '{}' Widget
 		{} = tk.{}({}, self.style_sheet["{}"])
 		{}.place(relx={}, rely={}, relwidth={}, relheight={})
-==>:Widget Append<<<
-			self.window_widgets.update({{"{}": {}}})
-==>:App Call<<<
+		self.window_widgets.update({{"{}": {}}})
+
+==>:creation_standalone<<<
+
+		# Creating '{}' Widget
+		self.{} = tk.{}({}, self.style_sheet["{}"])
+		self.{}.place(relx={}, rely={}, relwidth={}, relheight={})
+			
+==>:app_call<<<
 
 
 # Running the Application
@@ -61,7 +68,7 @@ if __name__ == "__main__":
 	app = TkinterApp()
 	app.root.mainloop()
 
-==>:Assets Loading<<<
+==>:assets<<<
 
 
 	# Loading the style sheet for the widgets
@@ -76,21 +83,52 @@ if __name__ == "__main__":
 
 				# Load the image and add it to the assets_dict
                 img = Image.open(os.path.join(dir_, filename))
-                self.assets_dict.update({filename: ImageTk.PhotoImage(img)})
+                self.assets_dict.update({{filename: ImageTk.PhotoImage(img)}})
 
-==>:Widget with Image or Command<<<
+==>:Option_Menu_standalone<<<
+
+		var_ = tk.StringVar()
+		self.tkinter_variables.update({{{}: var_}})
+
+		# Creating '{}' Widget
+		self.{} = tk.OptionMenu({}, var_, {}, self.style_sheet["{}"])
+		self.{}.place(relx={}, rely={}, relwidth={}, relheight={})
+
+==>:Option_Menu_dict<<<
+
+		var_ = tk.StringVar()
+		self.tkinter_variables.update({{{}: var_}})
+
+		# Creating '{}' Widget
+		{} = tk.OptionMenu({}, var_, {}, self.style_sheet["{}"])
+		{}.place(relx={}, rely={}, relwidth={}, relheight={})
+		self.window_widgets.update({{"{}": {}}})
+
+
+==>:creation_dict_img_or_cmd<<<
 
 
 		# Creating '{}' Widget
 		{} = tk.{}({}, self.style_sheet["{}"], {}={})
 		{}.place(relx={}, rely={}, relwidth={}, relheight={})
+		self.window_widgets.update({{"{}": {}}})
 
-==>:Option Menu<<<
-
-==>:Widget with Command and Image<<<
-
+==>:creation_dict_img_and_cmd<<<
 
 		# Creating '{}' Widget
-		{} = tk.{}({}, self.style_sheet["{}"], {}={}, {}={})
+		{} = tk.{}({}, self.style_sheet["{}"], image={}, command={})
 		{}.place(relx={}, rely={}, relwidth={}, relheight={})
+		self.window_widgets.update({{"{}": {}}})
 
+==>:creation_standalone_img_or_cmd<<<
+
+		# Creating '{}' Widget
+		self.{} = tk.{}({}, self.style_sheet["{}"], {}={})
+		self.{}.place(relx={}, rely={}, relwidth={}, relheight={})
+
+==>:creation_standalone_img_and_cmd<<<
+
+		# Creating '{}' Widget
+		self.{} = tk.{}({}, self.style_sheet["{}"], image={}, command={})
+		self.{}.place(relx={}, rely={}, relwidth={}, relheight={})
+		self.window_widgets.update({{"{}": {}}})

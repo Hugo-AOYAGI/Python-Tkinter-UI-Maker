@@ -12,12 +12,9 @@ from PIL import Image, ImageTk
 
 """
  TODO :
-   - Option to save widget styling (All options or styling only)
    - Option to write to a stylesheet:
         Eventually style_sheet editor
    - Finish code writing
-   - Add option for short style sheet:
-        Style Sheet where only changed parameters are written
 """
 
 # Creates the window for the UI Builder
@@ -36,7 +33,7 @@ class UIMaker:
 
     NON_STYLE_PROPS = ["scrollregion", "xscrollcommand", "xscrollincrement", "yscrollcommand", "yscrollincrement", "image", "textvariable", "command", "invalidcommand", "invcmd", "validatecommand", "vcmd", "listvariable", "variable", "menu", "selectimage", "tristateimage"]
 
-    SPECIAL_PROPS = ["image", "command", "validatecommand", "vcmd", "selectimage", "tristateimage"]
+    SPECIAL_PROPS = ["image", "command"]
 
     def __init__(self):
         # Setting up the main window
@@ -46,10 +43,10 @@ class UIMaker:
         self.root.configure(background='#A9A9A9')
 
         self.root.bind("<Configure>", lambda evt: self.changeWindowProps("width", evt))
+        self.root.protocol("WM_DELETE_WINDOW", self.askCloseWindow)
         
         # WINDOW VARIABLES
         self.user_widgets = {} # Widget Name ==> Widget Instance
-        self.widget_vars = {} # Widget Name ==> Control Variable
         self.prop_vars = {} # Property Name ==> Tkinter Variable
         self.input_fields = {} # Property Name ==> Tkinter Entry
         self.problem_count = 0
@@ -59,9 +56,8 @@ class UIMaker:
         self.ui_json_file_path = ""
         self.assets_path = "None"
         self.assets_images = {} # Image Name ==> PhotoImage Object
-        self.widget_images = {} # Widget Name ==> Image Name
+        self.default_widget_properties = {} # Widget Name ==> Properties dict
 
-        
 
         # CODE WRITING VARIABLES
         self.code = {
@@ -70,15 +66,20 @@ class UIMaker:
             "funcs": {
                 "None": []
             },
-            "parents": {}
+            "parents": {},
+            "optionMenuVals": {},
+            "optionMenuStringVars": {},
+            "types": {},
+            "images": {},
+            "commands": {}
         }
 
         self.style_sheet = {} # Style Class Name ==> Styling Properties
 
         self.root_options = { # Properties of the window itself like title or geometry
             "title": "Tkinter App",
-            "width": "1100",
-            "height": "600",
+            "width": "1600",
+            "height": "900",
             "xpos": "0",
             "ypos": "0"
         }
@@ -88,6 +89,11 @@ class UIMaker:
         self.setupUICanvas()
         self.setupWidgetPropsBar()
         self.setupMenuBar()
+
+        self.selectPrev(0)
+
+
+
 
     # Creates the upper menu of the window
     def setupMenuBar(self):
@@ -118,7 +124,8 @@ class UIMaker:
         stylemenu = tk.Menu(self.menu, tearoff=False)
         stylemenu.add_command(label="Import StyleSheet", command=self.importStyleSheet)
         stylemenu.add_command(label="Export StyleSheet", command=self.exportStyleSheet)
-        stylemenu.add_command(label="Add Assets Folder", command=self.addAssetsFolder)
+        stylemenu.add_separator()
+        stylemenu.add_command(label="Add Assets Folder", command=self.addAssetsFolder, accelerator="Ctrl+A")
 
         self.menu.add_cascade(label="Style", menu=stylemenu)
 
@@ -128,6 +135,9 @@ class UIMaker:
         self.root.bind_all("<Control-s>", self.quickSave)
         self.root.bind_all("<Control-o>", self.openUI)
         self.root.bind_all("<Control-f>", self.askAddFunction)
+        self.root.bind_all("<Control-a>", self.addAssetsFolder)
+        self.root.bind_all("<Control-Down>", self.selectNext)
+        self.root.bind_all("<Control-Up>", self.selectPrev)
 
     # Creates the widget bar where you can select all the widgets to place
     def setupWidgetsBar(self):
@@ -148,6 +158,9 @@ class UIMaker:
     
     # Ask the user to add a new assets folder
     def addAssetsFolder(self, dir_ = 0):
+        
+        dir_ = 0 if type(dir_) == tk.Event else dir_
+
         self.assets_images = {}
         if dir_ == "None":
             return
@@ -274,7 +287,6 @@ class UIMaker:
         if selected == "root_window":
             names = self.root_options.keys()
             values = self.root_options.values()
-            
             self.createWidgetPropertiesInputs(names, values, [])
         else:
         # Checks if the widget is any other widget
@@ -291,11 +303,10 @@ class UIMaker:
 
             # Remove the non style properties to then add them in a separate list for pop up input properties
             for name in names:
-                if name in UIMaker.NON_STYLE_PROPS:
-                    names.remove(name)
-                    if name in UIMaker.SPECIAL_PROPS:
-                        popup_props.append(name)
-                    
+                if name in UIMaker.SPECIAL_PROPS:
+                    popup_props.append(name)
+            
+            names = list(filter(lambda x: x not in UIMaker.NON_STYLE_PROPS, names))
 
             values += [selected[key] for key in filter(lambda x: x not in UIMaker.NON_STYLE_PROPS, list(selected.keys()))]
             
@@ -347,7 +358,7 @@ class UIMaker:
                 btn = tk.Button(self.props_frame, text=name, command=lambda x=name: self.widgetImageAsk(x))
                 btn.place(relx=0, rely=0.02*(i+last_i), relwidth=1, relheight=0.02)
             
-            if name in ["command", "validatecommand", "vcmd"]:
+            if name in ["command"]:
                 btn = tk.Button(self.props_frame, text=name, command=lambda x=name: self.widgetCommandAsk(x))
                 btn.place(relx=0, rely=0.02*(i+last_i), relwidth=1, relheight=0.02)
             
@@ -374,21 +385,35 @@ class UIMaker:
             return 0
         
         self.pop_win = PopUp(self.root, "Choose a command for the widget", self.updateWidgetCommand, name)
+        self.pop_win.addInput("OptionMenu", "Widget to lift", self.user_widgets.keys())
+        self.pop_win.addCloseFunc(self.pop_up_close)
     
     def updateWidgetImage(self, name, variables):
         widg = self.user_widgets[self.selected_widget_name.get()]
         widg[name] = self.assets_images[variables["Widget Image"].get()]
 
         # Updating the images dict
-        if self.selected_widget_name.get() not in self.widget_images.keys():
-            self.widget_images.update({self.selected_widget_name.get(): self.assets_images[variables["Widget Image"].get()]})
+        if self.selected_widget_name.get() not in self.code["images"].keys():
+            self.assets_images.update({self.selected_widget_name.get(): self.assets_images[variables["Widget Image"].get()]})
+            self.code["images"].update({self.selected_widget_name.get(): variables["Widget Image"].get()})
         else:
-            self.widget_images[self.selected_widget_name.get()] = self.assets_images[variables["Widget Image"].get()]
+            self.assets_images[self.selected_widget_name.get()] = self.assets_images[variables["Widget Image"].get()]
+            self.code["images"][self.selected_widget_name.get()] = variables["Widget Image"].get()
 
         self.pop_win = 0
 
-    def updateWidgetCommand(self, event, variables):
-        pass
+    def updateWidgetCommand(self, name, variables):
+        widg = self.user_widgets[self.selected_widget_name.get()]
+        # Add the command to the widget
+        widg[name] = lambda x=self.user_widgets[variables["Widget to lift"].get()]: x.lift()
+
+        # Save the command in a dictionary
+        if self.selected_widget_name.get() in self.code["commands"].keys():
+            self.code["commands"][self.selected_widget_name.get()] = [variables["Widget to lift"].get(), name]
+        else:
+            self.code["commands"].update({self.selected_widget_name.get(): [variables["Widget to lift"].get(), name]})
+
+        self.pop_win = 0
         
 
     def deleteWidget(self, widg = False):
@@ -409,6 +434,17 @@ class UIMaker:
             self.user_widgets[key].destroy()
             del self.user_widgets[key]
 
+        # Delete the widget from all the dictionaries
+        for parent in self.code["parents"]:
+            if to_delete in self.code["parents"][parent]:
+                index = self.code["parents"][parent].index(to_delete)
+                del self.code["parents"][parent][index]
+
+        for func in self.code["funcs"]:
+            if to_delete in self.code["funcs"][func]:
+                index = self.code["funcs"][func].index(to_delete)
+                del self.code["funcs"][func][index]
+
         # Delete the widget itself
         self.user_widgets[to_delete].destroy()
         del self.user_widgets[to_delete]
@@ -420,7 +456,7 @@ class UIMaker:
     def saveUI(self, quick = False):
         if self.problem_count > 0:
             msgbox.showwarning("Warning", "Please fix all the current problems before trying to save the UI !")
-
+            return False
 
         # Create the json file to save the UI
         UI = {}
@@ -438,7 +474,12 @@ class UIMaker:
             # Retrieve widget properties
             props_names = self.user_widgets[widg_name].keys()
             vals = [self.user_widgets[widg_name][prop] for prop in props_names]
-            styling = {props_names[i]: vals[i] for i in range(len(vals))}
+            styling = {}
+            
+            for i, name in enumerate(props_names):
+                class_ = self.user_widgets[widg_name].winfo_class()
+                if vals[i] != self.default_widget_properties[class_][name]:
+                    styling.update({name: vals[i]})
 
             # Handle special case
             for key, val in styling.items():
@@ -457,25 +498,22 @@ class UIMaker:
         # Save the code dict
         UI["code"] = self.code
 
+        print(self.code)
+
         UI["sheet"] = self.sheet
-
-        UI["types"] = {}
-
-        # Saving the class of each widget
-        for widget in UI["widget_names"]:
-            if widget != "root":
-                UI["types"].update({widget: self.user_widgets[widget].winfo_class()})
 
         path_ = askfile.asksaveasfile(defaultextension=".json") if not quick else self.ui_json_file_path
 
         if not path_:
-            return
+            return False
 
         self.ui_json_file_path = path_.name if not quick else path_
 
         # Save the ui in a json file
         with open(self.ui_json_file_path, "w") as ui_file:
             json.dump(UI, ui_file)
+
+        return True
 
     def quickSave(self, *args):
         if self.ui_json_file_path != "":
@@ -495,7 +533,6 @@ class UIMaker:
             
             # Update the window variables
             self.code = ui_dict["code"]
-            self.types = ui_dict["types"]
             self.root_options = ui_dict["root_options"]
             self.changeWindowSize()
 
@@ -531,6 +568,7 @@ class UIMaker:
                             variables["Widget Parent"].set(parent)
                             variables["Widget Name"].set(widget)
                             variables["Is Standalone"].set(True if widget in self.code["standalones"] else False)
+                                
 
                             # Finding their creation function
                             variables["Created in Function"].set(self.findCreationFunc(widget))
@@ -539,15 +577,18 @@ class UIMaker:
                             seen_widgets.append(widget)
                             
                             # Place the widget
-                            self.placeWidget(self.types[widget], variables)
+                            self.placeWidget(self.code["types"][widget], variables)
                 
                 # Setting up the new layer
                 layer_parents = new_layer_parents
             
             for widget in filter(lambda x: x!="root", self.user_widgets.keys()):
                 self.updateWidgetPropertiesFromSheet(widget, ui_dict["sheet"][widget])
+                # Add command if there was one
+                if widget in self.code["commands"].keys():
+                    widg_to_lift = self.user_widgets[self.code["commands"][widget][0]]
+                    self.user_widgets[widget][self.code["commands"][widget][1]] = lambda x=widg_to_lift: x.lift()
 
-            print(self.user_widgets)
 
     def updateWidgetPropertiesFromSheet(self, widg_name, sheet):
         for prop in sheet["styling"].keys():
@@ -587,7 +628,9 @@ class UIMaker:
         # Appending the properties to a dictionary
         new_class = {}
         for i, name in enumerate(names):
-            new_class.update({name: values[i]})
+            class_ = self.user_widgets[widg_name].winfo_class()
+            if values[i] != self.default_widget_properties[class_][name]:
+                new_class.update({name: values[i]})
         
         # Updating the style sheet
         self.style_sheet.update({variables["Class Name"].get(): new_class})
@@ -652,9 +695,6 @@ class UIMaker:
         with open(path.name, "w") as new_sheet:
             json.dump(self.style_sheet, new_sheet)
 
-    def getChangedProperties(self, widg_name):
-        pass
-
     def resetUI(self):
         self.root.destroy()
         self.__init__()
@@ -665,7 +705,7 @@ class UIMaker:
         
         # Creating the frame that contains the user UI
         self.ui = tk.Frame(self.root, bg="white")
-        self.ui.place(relx=0.25, rely=0.025, relwidth=0.75, relheight=0.75)
+        self.ui.place(relx=0.25, rely=0, relwidth=0.75, relheight=0.80)
 
         self.user_widgets.update({"root": "root_window"})
 
@@ -700,11 +740,11 @@ class UIMaker:
         
         self.pop_win = 0
 
-        templates = {}
-
-        code = ""
+        print(variables["sorter_list"])
 
         style_sheet = {}
+
+        controller = CodeWritingController(self.code, path, variables["Sheet Name"].get() + ".json", "assets")
 
         # Saving style to a style_sheet
         for widg_name in self.user_widgets.keys():
@@ -723,79 +763,29 @@ class UIMaker:
                 
             style_sheet.update({widg_name: props})
 
-        with open(os.path.join(os.path.dirname(__file__), "sheet_test.json"), "w") as new_sheet:
+        with open(os.path.join(os.path.dirname(__file__), variables["Sheet Name"].get() + ".json"), "w") as new_sheet:
             json.dump(style_sheet, new_sheet)
 
-        # Loading all of the templates into a dictionary
-        with open(os.path.join(os.path.dirname(__file__), "Templates.txt"), "r") as f:
-            data = f.read()
-            data = data.split("==>:")
-            data = data[1::]
-            data = [el.split("<<<") for el in data]
-            for i, template in enumerate(data):
-                data[i][1] = data[i][1][2::]
-                templates.update({template[0]: template[1]})
+        controller.addTemplate("class")
 
-        # Adding the class creation template
+        controller.apendFunction("None")
 
-        # Getting the format arguments : title, (w, h, x, y), style_sheet_path
-        format_args = [ self.root_options["title"],
-                        self.root_options["width"],
-                        self.root_options["height"],
-                        self.root_options["xpos"],
-                        self.root_options["ypos"]]
-        code += templates["Class"].format(*format_args)
-
-        # Creating parents in the init function first
-        for parent in self.code["parents"].keys():
-            if parent in self.code["funcs"]["None"]:
-                args = self.getWidgetFormatArgs(parent)
-                code += templates["Widget Creation"].format(*args)
-                if parent not in self.code["standalones"]:
-                    code += templates["Widget Append"].format(parent, args[1])
-
-        # Loops through the widgets in the init function
-        for widg_name in self.code["funcs"]["None"]:
-            args = self.getWidgetFormatArgs(widg_name)
-            code += templates["Widget Creation"].format(*args)
-            if widg_name not in self.code["standalones"]:
-                code += templates["Widget Append"].format(widg_name, args[1])
-    
-        # Calling the functions
-        for func in variables["sorter_list"]:
-            if func == "None":
-                continue
-            code += templates["Setup Funcs Call"].format(func)
+        for func in list(filter(lambda x: x!="None", self.code["funcs"])):
+            controller.addTemplate("func_call", func=func)
         
-        code += templates["Sheet Load Func"].format("sheet_test.json")
-
-        # Looping through the functions
-
-        for func in variables["sorter_list"]:
-            if func == "None":
-                continue
-            code += templates["Function"].format(func)
-            for widg_name in self.code["funcs"][func]:
-                # Creating parents first
-                for parent in self.code["parents"].keys():
-                    if parent in self.code["funcs"][func]:
-                        args = self.getWidgetFormatArgs(parent)
-                        code += templates["Widget Creation"].format(*args)
-                        if parent not in self.code["standalones"]:
-                            code += templates["Widget Append"].format(parent, args[1])
-
-                # Loops through the widgets
-                for widg_name in self.code["funcs"][func]:
-                    args = self.getWidgetFormatArgs(widg_name)
-                    code += templates["Widget Creation"].format(*args)
-                    if widg_name not in self.code["standalones"]:
-                        code += templates["Widget Append"].format(widg_name, args[1])
-
-        code += templates["App Call"]
-
+        controller.addTemplate("sheet_load_func")
+        controller.addTemplate("assets")
+        
+        if len(self.code["funcs"].keys()) > 2:
+            for func in variables["sorter_list"]:
+                controller.appendFunction(func)
+        else:
+            controller.appendFunction(self.code["funcs"].keys()[0])
+        
+        controller.addTemplate("app_call")
 
         with open(path.name, "w") as codefile:
-            codefile.write(code)
+            codefile.write(controller.getCode())
 
     # Asks the user the options for the code writing. 
     # OPTION:
@@ -810,13 +800,27 @@ class UIMaker:
 
         self.pop_win = PopUp(self.root, "Test", self.writeCode, path)
         self.pop_win.addCloseFunc(self.pop_up_close)
-        self.pop_win.addInput("sorter", "Function Creation Order", ["Sort the functions by order of creation\n (This can impact the way the app works !)", self.code["funcs"].keys()])
+        if len(self.code["funcs"].keys()) > 2:
+            sorter_args =  ["Sort the functions by order of creation\n (This can impact the way the app works !)", list(filter(lambda x: x!= "None",self.code["funcs"].keys()))]
+            self.pop_win.addInput("sorter", "Function Creation Order", sorter_args)
+        self.pop_win.addInput("Entry", "Sheet Name")
     
+
+
     def findParentName(self, widg_name):
         for parent in self.code["parents"].keys():
             if widg_name in self.code["parents"][parent]:
                 return parent
     
+    def getWidgetText(self, args, templates):
+        if len(args[1]) == 2:
+            pass
+        if len(args[1]) == 4:
+            pass
+        if len(args[1]) == 0:
+            pass
+
+
     def getWidgetFormatArgs(self, widg_name):
         # Getting the widget class and short name
         class_ = self.user_widgets[widg_name].winfo_class()
@@ -824,10 +828,7 @@ class UIMaker:
 
         # Checking if the widget is a standalone
         if widg_name in self.code["standalones"]:
-            short = "self." + widg_name.replace(" ", "")
-            # Checking if the name is allowed (No number as first character)
-            if widg_name[0] in ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]:
-                short = "self._" + widg_name[1::]
+            short = "self." + self.formatName(widg_name.replace(" ", ""))
 
         # Getting the widget parent
         parent = self.findParentName(widg_name)
@@ -837,35 +838,61 @@ class UIMaker:
         # Getting the position and size
         pos = self.widget_position[widg_name]
 
-        return [widg_name, short, class_, parent, widg_name, short, pos[0], pos[1], pos[2], pos[3]]
+        args_1 = [widg_name, short, class_, parent, widg_name, short, pos[0], pos[1], pos[2], pos[3]]
+        
+        args_2 = []
 
-    # Returns the writen code to the user, either by asking him to save it or in a label.
-    def returnCode(self):
+        if widg_name in self.code["commands"].keys():
+            args_2 += [self.code["commands"][widg_name][1], "self.goTo" + self.formatName(self.code["commands"][widg_name][0])]
+        if widg_name in self.code["images"].keys():
+            args_2 += ["image", "self.assets_dict[{}]".format(self.formatName(self.code["images"][widg_name]))]
+            
+        return args_1, args_2
+
+    def formatName(self,name):
         pass
-    
-    # Saves the current selected widget properties as a styling class in the main stylesheet.
-    def saveToStyleSheet(self):
-        pass
+
+       
+
+
     
     # Selects the widget which was clicked on or which was selected in the drop menu.
     def selectWidget(self, *args):
         # Checks if selected widget is the root window
-        if self.selected_widget_name.get() == "root":
-            # Removing the chose styling and save styling options
-            self.delete_btn.place_forget()
-            self.save_style_btn.place_forget()
-            self.style_btn.place_forget()
-        else:
-            self.delete_btn.place(relx=0, rely=0, relwidth=0.33, relheight=1)
-            self.save_style_btn.place(relx=0.33, rely=0, relwidth=0.33, relheight=1)
-            self.style_btn.place(relx=0.66, rely=0, relwidth=0.33, relheight=1)
         # Prevent widget selection if there are problems
         if self.problem_count > 0:
             if self.prev:
                 msgbox.showwarning("Warning", "Please fix all the problems in the current widget before selection another one.")
                 self.selected_widget_name.set(self.prev)
         else:
+            if self.selected_widget_name.get() == "root":
+                # Removing the chose styling and save styling options
+                self.delete_btn.place_forget()
+                self.save_style_btn.place_forget()
+                self.style_btn.place_forget()
+            else:
+                self.delete_btn.place(relx=0, rely=0, relwidth=0.33, relheight=1)
+                self.save_style_btn.place(relx=0.33, rely=0, relwidth=0.33, relheight=1)
+                self.style_btn.place(relx=0.66, rely=0, relwidth=0.33, relheight=1)
             self.getWidgetProperties()
+    
+    def selectNext(self, evt):
+        curr = self.selected_widget_name.get()
+        widg_list = list(self.user_widgets.keys())
+        # Get the name of the next widget in the list
+        next_ = widg_list[(widg_list.index(curr) + 1) % (len(widg_list))]
+        # Select that widget
+        self.selected_widget_name.set(next_)
+        self.selectWidget()
+
+    def selectPrev(self, evt):
+        curr = self.selected_widget_name.get()
+        widg_list = list(self.user_widgets.keys())
+        # Get the name of the previous widget in the list
+        next_ = widg_list[(widg_list.index(curr) - 1) % (len(widg_list))]
+        # Select that widget
+        self.selected_widget_name.set(next_)
+        self.selectWidget()
     
     # Places the widget that was selected in the widget selection bar.
     def placeWidget(self, name, variables):
@@ -875,6 +902,8 @@ class UIMaker:
 
         if name == 'OptionMenu':
             self.code["tkVars"].update({variables["StringVar Name"].get(): tk.StringVar()})
+            self.code["optionMenuVals"].update({widget_name: "','".join(variables['Default Values'].get().split(","))})
+            self.code["optionMenuStringVars"].update({widget_name: variables["StringVar Name"].get()})
             args = ", self.code['tkVars'][variables['StringVar Name'].get()], '{}'".format("','".join(variables['Default Values'].get().split(",")))
             
         parent = "self.ui" if variables["Widget Parent"].get() == "root" else "self.user_widgets[variables['Widget Parent'].get()]"
@@ -891,7 +920,14 @@ class UIMaker:
 
         # Adding the widget in the dictionary
         self.user_widgets.update({widget_name: widget})
+        self.code["types"].update({widget_name: name})
         self.widget_position.update({widget_name: (0, 0, 0.2, 0.2)})
+
+        # Add the widget properties to the default widget properties
+        if name not in self.default_widget_properties.keys():
+            self.default_widget_properties.update({name: {}})
+            for prop in widget.keys():
+                self.default_widget_properties[name].update({prop: widget[prop]})
 
         # Add the widget to the code writing variables
         if variables["Is Standalone"].get() == "1":
@@ -953,14 +989,14 @@ class UIMaker:
                 widg_name = self.selected_widget_name.get() if len(args) == 3 else args[0]
                 self.user_widgets[widg_name].place_forget()
                 # Get the position and size
-                if len(args) == 3:
+                if len(args) == 3 or len(args) == 0:
                     w, h, x, y = self.prop_vars["relwidth"].get(), self.prop_vars["relheight"].get(), self.prop_vars["relx"].get(), self.prop_vars["rely"].get()
                 else:
                     x, y, w, h = args[1], args[2], args[3], args[4]
                 self.user_widgets[widg_name].place(relx=x, rely=y, relwidth=w, relheight=h)
                 # Update dictionary
                 self.widget_position[widg_name] = (x, y, w, h)
-                if not args:
+                if len(args) == 3 or len(args) == 0:
                     if self.input_fields[name]["bg"] == "red":
                         self.input_fields[name]["bg"] = "white"
                         self.problem_count -= 1
@@ -984,7 +1020,7 @@ class UIMaker:
     # Changes the root_option dictionary when the string var are changed
     def changeWindowProps(self, name, *args):
         # Checks if the property is the title, if not make sure the value is allowed
-        if name != "title":
+        if name != "title" and self.selected_widget_name.get() == "root":
             try:
                 int(self.prop_vars[name].get())
                 self.root_options[name] = self.prop_vars[name].get()
@@ -999,7 +1035,7 @@ class UIMaker:
                 if self.input_fields[name]["bg"] != "red":
                     self.input_fields[name]["bg"] = "red"
                     self.problem_count += 1
-        else:
+        elif name == "title":
             self.root_options[name] = self.prop_vars[name].get()
         self.pb_sticker['text'] = "{} Problem(s)".format(self.problem_count)
         if self.problem_count == 0:
@@ -1025,19 +1061,24 @@ class UIMaker:
             ui_width = 0.75
             ui_height = ui_width / (new_ratio/win_ratio)
         else:
-            ui_height = 0.75
+            ui_height = 0.80
             ui_width = ui_height * (new_ratio/win_ratio)
         
         # Replace the UI
         self.ui.place_forget()
-        self.ui.place(relx=0.25+(0.75 - ui_width)/2, rely=0.025+(0.75 - ui_height)/2, relwidth=ui_width, relheight=ui_height)
-    
-    def reloadPosition(self, *args):
-        pass
+        self.ui.place(relx=0.25+(0.75 - ui_width)/2, rely=(0.80 - ui_height)/2, relwidth=ui_width, relheight=ui_height)
 
     # Asks if the user wishes to save the UI before the window closes
     def askCloseWindow(self):
-        pass
+        if msgbox.askyesno("Quit", "Do you wish to save before quitting ?"):
+            res = self.saveUI()
+            if res:
+                self.root.destroy()
+                sys.exit()
+        else:
+            self.root.destroy()
+            sys.exit()
+
     
 
 # Creates a pop up to retrieve parameters
@@ -1079,11 +1120,9 @@ class PopUp:
             self.top.destroy()
             return 0
         
-        n_inputs = len(self.variables.keys()) - 1
-        
         # Creates the input label and widget
         lbl = tk.Label(self.top, text=name, relief="raised")
-        lbl.place(relx=0, rely=0.1*n_inputs, relwidth=0.5, relheight=0.1)
+        lbl.place(relx=0, rely=0.1*self.n_inputs, relwidth=0.5, relheight=0.1)
 
         # Entry input for text
         if _type == "Entry":
@@ -1114,12 +1153,14 @@ class PopUp:
             self.updateSorter(arg[1])
             lbl = tk.Label(self.top, text=arg[0])
             lbl.place(relx=0, rely=0, relwidth=1, relheight=0.1)
+            self.n_inputs += 6
         
         if _type != "sorter":
             # Placing the input
-            input_.place(relx=0.5, rely=0.1*n_inputs, relwidth=0.5, relheight=0.1)
+            input_.place(relx=0.5, rely=0.1*self.n_inputs, relwidth=0.5, relheight=0.1)
             if self.n_inputs == 0:
                 input_.focus()
+            self.n_inputs += 1
     
     def focusNextWindow(self, event):
         event.widget.tk_focusNext().focus()
@@ -1132,9 +1173,9 @@ class PopUp:
         for i, el in enumerate(list_):
             color = "#F9F9F9" if i%2==0 else "#D9D9D9"
             btn = tk.Button(self.top, text="Up", command=lambda x=i: self.moveUpSorter(x), bg=color)
-            btn.place(relx=0, rely=(0.8)*(i/len(list_)), relwidth=0.1, relheight=(0.8)/(len(list_)))
+            btn.place(relx=0, rely=(0.5)*(i/len(list_)) + 0.1, relwidth=0.1, relheight=(0.5)/(len(list_)))
             lbl = tk.Label(self.top, text=el, bg=color)
-            lbl.place(relx=0.1, rely=(0.8)*(i/len(list_)), relwidth=0.9, relheight=(0.8)/(len(list_)))
+            lbl.place(relx=0.1, rely=(0.5)*(i/len(list_)) + 0.1, relwidth=0.9, relheight=(0.5)/(len(list_)))
 
     def moveUpSorter(self, i):
         if i == 0:
@@ -1168,12 +1209,235 @@ class PopUp:
         self.top.destroy()
         
 
+
+class CodeWritingController:
+
+    TEMPLATE_ARGS = json.load(open(os.path.join(os.path.dirname(__file__), "templates_args.json"), "r"))
+
+    def __init__(self, data, root_options, style_sheet_path, assets_path):
+        
+        self.code_data = data
+        self.root_options = root_options
+        self.style_sheet_path = style_sheet_path
+        self.assets_path = assets_path
+        self.code = ""
+        self.templates = self.loadTemplates()
+    
+
+    def getCode(self):
+        return self.code
+
+    def loadTemplates(self):
+
+        templates = {}
+
+        # Loading all of the templates into a dictionary
+        with open(os.path.join(os.path.dirname(__file__), "Templates.txt"), "r") as f:
+            data = f.read()
+            data = data.split("==>:")
+            data = data[1::]
+            data = [el.split("<<<") for el in data]
+            for i, template in enumerate(data):
+                data[i][1] = data[i][1][2::]
+                templates.update({template[0]: template[1]})
+        
+        return templates
+
+    # Sort a list of widget with the top level parents first
+    def HierarchySort(self, widget_list):
+
+        widgets_seen = []
+        
+        widget_queue = widget_list.copy()
+        
+        while len(widget_queue) > 0:
+
+            top_level = False
+            current_level_widget = widget[0]
+            found_higher = False
+
+            # Find the top level parent of that widget
+            while not top_level:
+                for parent in self.code_data["parents"]:
+                    if current_level_widget in self.code_data["parents"][parent] and parent not in widgets_seen and parent != "root" and parent in widget_list:
+                        current_level_widget = parent
+                        found_higher = True
+                        break
+
+                if not found_higher:
+                    widgets_seen.append(current_level_widget)
+                    widget_queue = list(filter(lambda x: x!=current_level_widget, widget_queue))
+                    break
+            
+        return widgets_seen
+
+                
+
+    def appendWidget(self, widget):
+
+        template_name = ""
+
+        kwargs = {"widget": widget}
+        
+        if widget in self.code_data["optionMenuVals"].keys():
+            template_name += "Option_Menu_"
+        else:
+            template_name += "creation_"
+        
+        if widget in self.code_data["standalones"].keys():
+            template_name += "standalone"
+        else:
+            template_name += "dict"
+        
+        if widget in self.code_data["images"].keys() and widget in self.code_data["commands"].keys():
+            template_name += "_img_and_cmd"
+        elif widget in self.code_data["images"].keys():
+            template_name += "_img_or_cmd"
+            kwargs.update({"prop": "image"})
+        elif widget in self.code_data["commands"].keys():
+            template_name += "_img_or_cmd"
+            kwargs.update({"prop": "command"})
+        
+        self.addTemplate(template_name, kwargs)
+
+        
+
+    def appendFunction(self, func):
+        sorted_widgets = self.HierarchySort(self.code_data["funcs"][func])
+
+        self.addTemplate("func", func=func)
+
+        for widget in sorted_widgets:
+            self.appendWidget(widget)
+
+    
+
+    def addTemplate(self, template, **kwargs):
+        if template in CodeWritingController.TEMPLATE_ARGS.keys():
+            args = self.getArgsFromTemplate(template, **kwargs)
+            self.code += self.templates[template].format(args)
+        else:
+            self.code += self.templates[template]
+
+    def getArgsFromTemplate(self, template, **kwargs):
+        
+        args_names = CodeWritingController.TEMPLATE_ARGS[template]
+
+        if "widget" in kwargs.keys():
+            return self.getWidgetArgs(kwargs["widget"], args_names, kwargs["prop"] if "props" in kwargs.keys() else False)
+        
+        else:
+            return self.getMiscArgs(args_names, kwargs["func"] if "props" in kwargs.keys() else False)
+    
+    def getMiscArgs(self, args, func):
+        
+        format_args = []
+
+        for arg in args:
+            
+            if arg == "win_title":
+                format_args.append(self.root_options["title"])
+
+            if arg == "win_x":
+                format_args.append(self.root_options["xpos"])
+
+            if arg == "win_y":
+                format_args.append(self.root_options["ypos"])
+
+            if arg == "win_w":
+                format_args.append(self.root_options["width"])
+
+            if arg == "win_h":
+                format_args.append(self.root_options["height"])
+
+            if arg == "func_name":
+                format_args.append(self.formatName(func))
+
+            if arg == "sheet_path":
+                format_args.append(self.style_sheet_path)
+
+            if arg == "assets_path":
+                format_args.append(self.assets_path)
+        
+        return format_args
+
+    def getWidgetArgs(self, widget, args, prop):
+
+        format_args = []
+
+        widget_type = self.code_data["types"][widget]
+        widget_pos = self.code_data["widget_position"][widget]
+        
+        for arg in args:
+            
+            if arg == "name":
+                format_args.append(widget if "short" in args else formatName(widget))
+            
+            elif arg == "short":
+                format_args.append(UIMaker.WIDGET_SHORTS[UIMaker.WIDGETS.index(widget_type)])
+
+            elif arg == "widget":
+                format_args.append(widget_type)
+            
+            elif arg == "parent":
+                format_args.append(self.findParentOf(widget))
+            
+            elif arg == "x":
+                format_args.append(widget_pos[0])
+            
+            elif arg == "y":
+                format_args.append(widget_pos[1])
+            
+            elif arg == "w":
+                format_args.append(widget_pos[2])
+            
+            elif arg == "h":
+                format_args.append(widget_pos[3])
+
+            elif arg == "var_name":
+                format_args.append(self.code_data["optionMenuStringVar"])
+
+            elif arg == "options":
+                format_args.append("'" + self.code_data["optionMenuVals"] + "'")
+            
+            elif arg == "props_name":
+                format_args.append(prop)
+            
+            elif arg == "props_value":
+                if prop == "command":
+                    format_args.append("lambda: print('Command Coming Soon..')")
+                else:
+                    format_args.append("self.assets_dict[{}]".format(self.code["images"][widget]))
+            
+            elif arg == "img_value":
+                format_args.append("self.assets_dict[{}]".format(self.code["images"][widget]))
+
+            elif arg == "cmd_value":
+                format_args.append("lambda: print('Command Coming Soon..')")
+
+        return format_args
+
+    def findParentOf(self, widget):
+        
+        for parent in self.code_data["parents"]:
+            if widget in self.code_data["parents"][parent]:
+                return parent
+
+    def formatName(self, name):
+        res = ""
+        next_up = False
+        for char in name:
+            if char == " ":
+                next_up = True
+            else:
+                res += char if not next_up else char.upper()
+        return res
+
 if __name__ == "__main__":
     print("Launching the User Interface Builder...")
     uimaker = UIMaker()
 
     uimaker.root.mainloop()
-    print("Closing the User Interface Builder...")
     
 
 
