@@ -9,12 +9,14 @@ import json
 import inspect
 import re
 from PIL import Image, ImageTk
+from ctypes import windll
 
 """
  TODO :
-   - Option to write to a stylesheet:
-        Eventually style_sheet editor
-   - Finish code writing
+   - Touch to Select
+   - Undo and Redo option
+   - Search for widget
+   - Widget Tree View
 """
 
 # Creates the window for the UI Builder
@@ -39,8 +41,16 @@ class UIMaker:
         # Setting up the main window
         self.root = tk.Tk()
         self.root.title("UI Maker")
-        self.root.geometry("1100x600+0+0")
-        self.root.configure(background='#A9A9A9')
+        self.root.geometry("1600x900+0+0")
+        self.root.configure(background='#FFFFFF')
+
+        windll.shcore.SetProcessDpiAwareness(1)
+        self.root.tk.call('tk', 'scaling', 2)
+
+        imgicon = tk.PhotoImage(file=os.path.join('assets','icon.gif'))
+        self.root.tk.call('wm', 'iconphoto', self.root._w, imgicon)  
+
+        self.root.tk_setPalette(background="#F9F9FF", foreground="#050560")
 
         self.root.bind("<Configure>", lambda evt: self.changeWindowProps("width", evt))
         self.root.protocol("WM_DELETE_WINDOW", self.askCloseWindow)
@@ -50,18 +60,22 @@ class UIMaker:
         self.prop_vars = {} # Property Name ==> Tkinter Variable
         self.input_fields = {} # Property Name ==> Tkinter Entry
         self.problem_count = 0
-        self.widget_position = {} # Widget Name ==> Position and Size Tuple
         self.pop_win = False
         self.old_ratio = 0
         self.ui_json_file_path = ""
         self.assets_path = "None"
         self.assets_images = {} # Image Name ==> PhotoImage Object
         self.default_widget_properties = {} # Widget Name ==> Properties dict
+        self.stringVars = {}
+        self.removed_props = ["Menubutton", "textvariable"]
 
+        self.previous_search_value = "Search for widgets"
+
+        self.undo_history = []
+        self.redo_history = []
 
         # CODE WRITING VARIABLES
         self.code = {
-            "tkVars": {},
             "standalones": [],
             "funcs": {
                 "None": []
@@ -71,7 +85,8 @@ class UIMaker:
             "optionMenuStringVars": {},
             "types": {},
             "images": {},
-            "commands": {}
+            "commands": {},
+            "widget_position": {}
         }
 
         self.style_sheet = {} # Style Class Name ==> Styling Properties
@@ -138,6 +153,8 @@ class UIMaker:
         self.root.bind_all("<Control-a>", self.addAssetsFolder)
         self.root.bind_all("<Control-Down>", self.selectNext)
         self.root.bind_all("<Control-Up>", self.selectPrev)
+        self.root.bind_all("<Up>", self.up_arrow_scroll)
+        self.root.bind_all("<Down>", self.down_arrow_scroll)
 
     # Creates the widget bar where you can select all the widgets to place
     def setupWidgetsBar(self):
@@ -153,7 +170,7 @@ class UIMaker:
         for i in range(int(n_widgets / 2)):
             for j in range(2):
                 widget_name = UIMaker.WIDGETS[int(i+j*(n_widgets/2))]
-                btn = tk.Button(frame, text=widget_name, command=lambda x=widget_name: self.getWidgetParameters(x))
+                btn = tk.Button(frame, text=widget_name, command=lambda x=widget_name: self.getWidgetParameters(x), relief="groove", font=("Arial", 10), fg="#101050")
                 btn.place(relx=i/(n_widgets/2), rely=j*0.5, relwidth=1/(n_widgets/2), relheight=0.5)
     
     # Ask the user to add a new assets folder
@@ -219,29 +236,47 @@ class UIMaker:
         self.selected_widget_name.set("root")
 
         # Adding a title label
-        title_lbl = tk.Label(frame, text="Widget Properties")
+        title_lbl = tk.Label(frame, text="WIDGET PROPERTIES", font=("Arial", 12, "bold"), fg="#101060")
         title_lbl.place(relx=0, rely=0, relwidth=1, relheight=0.1)
 
         # Creating the option menu
         self.option_menu = tk.OptionMenu(frame, self.selected_widget_name, "root")
-        self.option_menu.place(relx=0, rely=0.1, relwidth=1, relheight=0.05)
+        self.option_menu.configure(relief="groove")
+        self.option_menu.place(relx=0, rely=0.1, relwidth=0.6, relheight=0.05)
         self.selected_widget_name.trace_add("write", self.selectWidget)
+
+        self.search = tk.StringVar()
+        self.search.set("Search for widgets")
+        self.search.trace_add("write", self.searchUpdate)
+
+        self.search_bar = tk.Entry(frame, textvariable=self.search, font=("Arial", 8), fg="#909090")
+        self.search_bar.place(relx=0.6, rely=0.1, relwidth=0.4, relheight=0.05)
+
+        self.search_results = tk.Frame(frame, bg="red")
+        self.search_results.place(relx=0.5, rely=0.15, relwidth=0.5, relheight=0.2)
+
+        self.searchUpdate()
 
         # Creating the widget action bar: delete, copy
         action_bar = tk.Frame(frame)
         action_bar.place(relx=0, rely=0.15, relwidth=1, relheight=0.05)
 
-        self.delete_btn = tk.Button(action_bar, text="Delete", command=self.deleteWidget)
-        self.delete_btn.place(relx=0, rely=0, relwidth=0.33, relheight=1)
+        action_bar_font = ("Arial", 7)
 
-        self.save_style_btn = tk.Button(action_bar, text="Save Styling", command=self.askSaveStyling)
-        self.save_style_btn.place(relx=0.33, rely=0, relwidth=0.33, relheight=1)
+        self.delete_btn = tk.Button(action_bar, text="Delete", command=self.deleteWidget, font=action_bar_font, relief="groove")
+        self.delete_btn.place(relx=0, rely=0, relwidth=0.25, relheight=1)
 
-        self.style_btn = tk.Button(action_bar, text="Chose Styling", command=self.askStyling)
-        self.style_btn.place(relx=0.66, rely=0, relwidth=0.33, relheight=1)
+        self.save_style_btn = tk.Button(action_bar, text="Save Styling", command=self.askSaveStyling, font=action_bar_font,relief="groove")
+        self.save_style_btn.place(relx=0.25, rely=0, relwidth=0.25, relheight=1)
+
+        self.style_btn = tk.Button(action_bar, text="Chose Styling", command=self.askStyling, font=action_bar_font, relief="groove")
+        self.style_btn.place(relx=0.50, rely=0, relwidth=0.25, relheight=1)
+
+        self.edit_btn = tk.Button(action_bar, text="Edit", command=self.editWidget, font=action_bar_font, relief="groove")
+        self.edit_btn.place(relx=0.75, rely=0, relwidth=0.25, relheight=1)
 
         # Creating a canvas in order to add a scrollbar
-        self.props_canv = tk.Canvas(frame, scrollregion = (0, 0, 100, 2000))
+        self.props_canv = tk.Canvas(frame, scrollregion = (0, 0, 100, 2000), yscrollincrement="2")
         self.props_canv.place(relx=0, rely=0.2, relwidth=1, relheight=0.8)
 
         self.sb = tk.Scrollbar(self.props_canv, command = self.props_canv.yview)
@@ -250,9 +285,9 @@ class UIMaker:
         self.props_canv.config(yscrollcommand=self.sb.set)
 
         # Creating the frame where the properties are displayed
-        self.props_frame = tk.Frame(self.props_canv, width=260, height=1800)
+        self.props_frame = tk.Frame(self.props_canv, width=370, height=1800)
         
-        self.props_canv.create_window(140, 900, window=self.props_frame)
+        self.props_canv.create_window(205, 900, window=self.props_frame)
 
         # Adding the mousewheel handler
         self.props_canv.bind_all("<MouseWheel>", self._on_mousewheel)
@@ -260,9 +295,79 @@ class UIMaker:
         # Selects the default widget to print its properties
         self.selectWidget()
     
+    def searchUpdate(self, *args):
+
+        search_value = self.search.get().lstrip(" ")
+
+        # Placeholder
+
+        self.search.set(search_value)
+
+        test_a = len(search_value) < 18 and self.previous_search_value == "Search for widgets"
+        test_b = len(search_value) > 18 and search_value.replace(" ", "") == "Searchforwidgets"
+
+        if search_value == "" or search_value == "Search for widgets" or test_a or test_b:
+            self.previous_search_value = "Search for widgets"
+            self.setPlaceholder()
+        elif self.previous_search_value == "Search for widgets":
+            self.previous_search_value = search_value
+            self.search_bar.configure(fg="#050560")
+            temp = [char for char in search_value]
+            for char in [char for char in "Search for widgets"]:
+                temp.remove(char)
+            self.search.set("".join(temp))
+            search_value = temp[0]
+        else:
+            self.previous_search_value = search_value
+            self.search_bar.configure(fg="#050560")
+
+        # Check for widgets
+
+        possible_widgets = []
+
+        for widget in self.user_widgets.keys():
+            if widget.startswith(search_value) and search_value != "":
+                possible_widgets.append(widget)
+        if len(possible_widgets) > 0:
+            self.showSearchResults(possible_widgets)
+        else: 
+            self.removeSearchResults()
+
+    def removeSearchResults(self):
+        self.search_results.place_forget()
+
+    def showSearchResults(self, results):
+        for child in self.search_results.winfo_children():
+            child.destroy()
+        
+        self.search_results.place(relx=0.5, rely=0.15, relwidth=0.5, relheight=0.04*len(results))
+        self.search_results.lift()
+
+        for i, widget in enumerate(results):
+            btn = tk.Button(self.search_results, text=widget, command=lambda x=widget: self.searchResultPress(x), relief="groove")
+            btn.place(relx=0, rely=(1/len(results))*i, relwidth=1, relheight=(1/len(results)))
+        self.root.bind("<Return>", lambda evt, x=results[0]: self.searchResultPress(x, evt))
+        
+    def searchResultPress(self, widget_name, *args):
+        self.selected_widget_name.set(widget_name)
+        self.selectWidget()
+        self.search.set("")
+        self.searchUpdate()
+        
+
+    def setPlaceholder(self):
+        self.search_bar.configure(fg="#909090")
+        self.search.set("Search for widgets")
+
     def _on_mousewheel(self, event):
-        self.props_canv.yview_scroll(int(-1*(event.delta/120)), "units")
+        self.props_canv.yview_scroll(int(-5*(event.delta/120)), "units")
  
+    def down_arrow_scroll(self, event):
+        self.props_canv.yview_scroll(18, "units")
+
+    def up_arrow_scroll(self, event):
+        self.props_canv.yview_scroll(-18, "units")
+
     # Refreshes the option menu when new widgets are added 
     def refreshOptionMenu(self):
         # Deleting old values
@@ -293,7 +398,7 @@ class UIMaker:
             # Adding the custom properties
             names = UIMaker.WIDGET_CUSTOM_PROPS.copy()
             # Getting the current size and position properties
-            pos = self.widget_position[self.selected_widget_name.get()]
+            pos = self.code["widget_position"][self.selected_widget_name.get()]
             values = [pos[0], pos[1], pos[2], pos[3]]
 
             names += list(selected.keys())
@@ -355,13 +460,15 @@ class UIMaker:
         for i, name in enumerate(popup_props):
             
             if name in ["image", "tristateimage", "selectimage"]:
-                btn = tk.Button(self.props_frame, text=name, command=lambda x=name: self.widgetImageAsk(x))
+                btn = tk.Button(self.props_frame, text=name, command=lambda x=name: self.widgetImageAsk(x), relief="groove")
                 btn.place(relx=0, rely=0.02*(i+last_i), relwidth=1, relheight=0.02)
             
             if name in ["command"]:
-                btn = tk.Button(self.props_frame, text=name, command=lambda x=name: self.widgetCommandAsk(x))
+                btn = tk.Button(self.props_frame, text=name, command=lambda x=name: self.widgetCommandAsk(x), relief="groove")
                 btn.place(relx=0, rely=0.02*(i+last_i), relwidth=1, relheight=0.02)
             
+    def editWidget(self):
+        pass
     
     def widgetImageAsk(self, name):
         # Checks if a pop up window is already opened
@@ -469,17 +576,9 @@ class UIMaker:
         # Creating the stylesheet
         for widg_name in filter(lambda x: x!="root", self.user_widgets.keys()):
             # Retrieve widget position
-            pos = self.widget_position[widg_name]
+            pos = self.code["widget_position"][widg_name]
 
-            # Retrieve widget properties
-            props_names = self.user_widgets[widg_name].keys()
-            vals = [self.user_widgets[widg_name][prop] for prop in props_names]
-            styling = {}
-            
-            for i, name in enumerate(props_names):
-                class_ = self.user_widgets[widg_name].winfo_class()
-                if vals[i] != self.default_widget_properties[class_][name]:
-                    styling.update({name: vals[i]})
+            styling = self.getChangedPropertiesSheet(widg_name)
 
             # Handle special case
             for key, val in styling.items():
@@ -497,8 +596,6 @@ class UIMaker:
 
         # Save the code dict
         UI["code"] = self.code
-
-        print(self.code)
 
         UI["sheet"] = self.sheet
 
@@ -562,12 +659,22 @@ class UIMaker:
                             if widget in seen_widgets:
                                 continue
                             # Setting up their properties
-                            variables = {"Widget Name": tk.StringVar(), "Is Standalone": tk.BooleanVar(), "Widget Parent": tk.StringVar(), "Created in Function": tk.StringVar()}
+                            variables = {"Widget Name": tk.StringVar(), 
+                                        "Is Standalone": tk.BooleanVar(), 
+                                        "Widget Parent": tk.StringVar(), 
+                                        "Created in Function": tk.StringVar(),
+                                        "StringVar Name": tk.StringVar(),
+                                        "Default Values": tk.StringVar()
+                                        }
                         
                             # Getting the values of their parameters
                             variables["Widget Parent"].set(parent)
                             variables["Widget Name"].set(widget)
                             variables["Is Standalone"].set(True if widget in self.code["standalones"] else False)
+
+                            if widget in self.code["optionMenuVals"].keys():
+                                variables["StringVar Name"].set(self.code["optionMenuStringVars"][widget])
+                                variables["Default Values"].set(self.code["optionMenuVals"][widget].replace("'", ""))
                                 
 
                             # Finding their creation function
@@ -621,19 +728,25 @@ class UIMaker:
 
     def saveStyling(self, widg_name, variables):
         self.pop_win = 0
+    
+        # Updating the style sheet
+        self.style_sheet.update({variables["Class Name"].get(): self.getChangedPropertiesSheet(widg_name)})
+
+    def getChangedPropertiesSheet(self, widg_name):
         # Getting the widget properties
         names = list(self.user_widgets[widg_name].keys())
-        values = [self.user_widgets[widg_name][key] for key in names]
+        filtered_props = list(filter(lambda x: x not in self.removed_props,names))
+        values = [self.user_widgets[widg_name][key] for key in filtered_props]
+
 
         # Appending the properties to a dictionary
         new_class = {}
-        for i, name in enumerate(names):
-            class_ = self.user_widgets[widg_name].winfo_class()
+        for i, name in enumerate(filtered_props):
+            class_ = self.user_widgets[widg_name].winfo_class() if widg_name not in self.code["optionMenuVals"].keys() else "OptionMenu"
             if values[i] != self.default_widget_properties[class_][name]:
                 new_class.update({name: values[i]})
         
-        # Updating the style sheet
-        self.style_sheet.update({variables["Class Name"].get(): new_class})
+        return new_class
 
     # Spawns a new window to ask which styling to apply to the widget
     def askStyling(self):
@@ -714,37 +827,13 @@ class UIMaker:
 
     # Writes the code for the UI in Python 3
 
-    """
-        [Imports]
-        
-        class [App Name]:
-            def __init__(self):
-                --> Constructor
-                - 'root' Creation and Setup
-                - Variable definitions
-                - Widget creation from the 'None' Function
-                - Calling the widget creation functions
-            
-            def widgFunc1(self):
-                -Widget Creation
-            
-            def widgFunc2(self):
-                -Widget Creation
-            
-        - Calling the App if name is "__main__"
-        - Root MainLoop
-
-    """
-
     def writeCode(self, path = 0, variables = 0):
         
         self.pop_win = 0
 
-        print(variables["sorter_list"])
-
         style_sheet = {}
 
-        controller = CodeWritingController(self.code, path, variables["Sheet Name"].get() + ".json", "assets")
+        controller = CodeWritingController(self.code, self.root_options, variables["Sheet Name"].get() + ".json", "assets")
 
         # Saving style to a style_sheet
         for widg_name in self.user_widgets.keys():
@@ -752,35 +841,36 @@ class UIMaker:
             if widg_name == "root":
                 continue
 
+            changed_props = self.getChangedPropertiesSheet(widg_name)
             props = {}
-
-            names = list(self.user_widgets[widg_name].keys())
-            values = [self.user_widgets[widg_name][key] for key in names]
-
-            for i, name in enumerate(names):
-                val = values[i] if isinstance(values[i], (str, int, float)) else values[i].string
-                props.update({name: val})
+            
+            for name in list(changed_props.keys()):
+                if isinstance(changed_props[name], tk.Menu):
+                    break
+                value = changed_props[name] if isinstance(changed_props[name], (str, int, float)) else changed_props[name].string
+                props.update({name: value})
                 
             style_sheet.update({widg_name: props})
 
-        with open(os.path.join(os.path.dirname(__file__), variables["Sheet Name"].get() + ".json"), "w") as new_sheet:
+        with open(os.path.join(os.path.dirname(path.name), variables["Sheet Name"].get() + ".json"), "w") as new_sheet:
             json.dump(style_sheet, new_sheet)
 
         controller.addTemplate("class")
 
-        controller.apendFunction("None")
+        controller.appendFunction("None")
 
-        for func in list(filter(lambda x: x!="None", self.code["funcs"])):
+        for func in list(filter(lambda x: x!="None", list(self.code["funcs"].keys()))):
             controller.addTemplate("func_call", func=func)
         
         controller.addTemplate("sheet_load_func")
-        controller.addTemplate("assets")
-        
-        if len(self.code["funcs"].keys()) > 2:
+        if self.assets_path != "None":
+            controller.addTemplate("assets")
+
+        if len(list(self.code["funcs"].keys())) > 2:
             for func in variables["sorter_list"]:
                 controller.appendFunction(func)
-        else:
-            controller.appendFunction(self.code["funcs"].keys()[0])
+        elif len(list(self.code["funcs"].keys())) == 2:
+            controller.appendFunction(list(self.code["funcs"].keys())[1])
         
         controller.addTemplate("app_call")
 
@@ -804,56 +894,6 @@ class UIMaker:
             sorter_args =  ["Sort the functions by order of creation\n (This can impact the way the app works !)", list(filter(lambda x: x!= "None",self.code["funcs"].keys()))]
             self.pop_win.addInput("sorter", "Function Creation Order", sorter_args)
         self.pop_win.addInput("Entry", "Sheet Name")
-    
-
-
-    def findParentName(self, widg_name):
-        for parent in self.code["parents"].keys():
-            if widg_name in self.code["parents"][parent]:
-                return parent
-    
-    def getWidgetText(self, args, templates):
-        if len(args[1]) == 2:
-            pass
-        if len(args[1]) == 4:
-            pass
-        if len(args[1]) == 0:
-            pass
-
-
-    def getWidgetFormatArgs(self, widg_name):
-        # Getting the widget class and short name
-        class_ = self.user_widgets[widg_name].winfo_class()
-        short = UIMaker.WIDGET_SHORTS[UIMaker.WIDGETS.index(class_)]
-
-        # Checking if the widget is a standalone
-        if widg_name in self.code["standalones"]:
-            short = "self." + self.formatName(widg_name.replace(" ", ""))
-
-        # Getting the widget parent
-        parent = self.findParentName(widg_name)
-        if parent == "root":
-            parent = "self.root"
-        
-        # Getting the position and size
-        pos = self.widget_position[widg_name]
-
-        args_1 = [widg_name, short, class_, parent, widg_name, short, pos[0], pos[1], pos[2], pos[3]]
-        
-        args_2 = []
-
-        if widg_name in self.code["commands"].keys():
-            args_2 += [self.code["commands"][widg_name][1], "self.goTo" + self.formatName(self.code["commands"][widg_name][0])]
-        if widg_name in self.code["images"].keys():
-            args_2 += ["image", "self.assets_dict[{}]".format(self.formatName(self.code["images"][widg_name]))]
-            
-        return args_1, args_2
-
-    def formatName(self,name):
-        pass
-
-       
-
 
     
     # Selects the widget which was clicked on or which was selected in the drop menu.
@@ -870,10 +910,12 @@ class UIMaker:
                 self.delete_btn.place_forget()
                 self.save_style_btn.place_forget()
                 self.style_btn.place_forget()
+                self.edit_btn.place_forget()
             else:
-                self.delete_btn.place(relx=0, rely=0, relwidth=0.33, relheight=1)
-                self.save_style_btn.place(relx=0.33, rely=0, relwidth=0.33, relheight=1)
-                self.style_btn.place(relx=0.66, rely=0, relwidth=0.33, relheight=1)
+                self.delete_btn.place(relx=0, rely=0, relwidth=0.25, relheight=1)
+                self.save_style_btn.place(relx=0.25, rely=0, relwidth=0.25, relheight=1)
+                self.style_btn.place(relx=0.50, rely=0, relwidth=0.25, relheight=1)
+                self.edit_btn.place(relx=0.75, rely=0, relwidth=0.25, relheight=1)
             self.getWidgetProperties()
     
     def selectNext(self, evt):
@@ -901,10 +943,10 @@ class UIMaker:
         args = ""
 
         if name == 'OptionMenu':
-            self.code["tkVars"].update({variables["StringVar Name"].get(): tk.StringVar()})
+            self.stringVars.update({variables["StringVar Name"].get(): tk.StringVar()})
             self.code["optionMenuVals"].update({widget_name: "','".join(variables['Default Values'].get().split(","))})
             self.code["optionMenuStringVars"].update({widget_name: variables["StringVar Name"].get()})
-            args = ", self.code['tkVars'][variables['StringVar Name'].get()], '{}'".format("','".join(variables['Default Values'].get().split(",")))
+            args = ", self.stringVars[variables['StringVar Name'].get()], '{}'".format("','".join(variables['Default Values'].get().split(",")))
             
         parent = "self.ui" if variables["Widget Parent"].get() == "root" else "self.user_widgets[variables['Widget Parent'].get()]"
 
@@ -921,7 +963,7 @@ class UIMaker:
         # Adding the widget in the dictionary
         self.user_widgets.update({widget_name: widget})
         self.code["types"].update({widget_name: name})
-        self.widget_position.update({widget_name: (0, 0, 0.2, 0.2)})
+        self.code["widget_position"].update({widget_name: (0, 0, 0.2, 0.2)})
 
         # Add the widget properties to the default widget properties
         if name not in self.default_widget_properties.keys():
@@ -978,7 +1020,7 @@ class UIMaker:
 
         # Add special case of OptionMenu
         if name == "OptionMenu":
-            self.pop_win.addInput("Entry", "StringVar Name", self.code["tkVars"])
+            self.pop_win.addInput("Entry", "StringVar Name", self.stringVars.keys())
             self.pop_win.addInput("Entry", "Default Values")
 
     # Reload the selected widget on the canvas after one of its properties was changed.
@@ -995,7 +1037,7 @@ class UIMaker:
                     x, y, w, h = args[1], args[2], args[3], args[4]
                 self.user_widgets[widg_name].place(relx=x, rely=y, relwidth=w, relheight=h)
                 # Update dictionary
-                self.widget_position[widg_name] = (x, y, w, h)
+                self.code["widget_position"][widg_name] = (x, y, w, h)
                 if len(args) == 3 or len(args) == 0:
                     if self.input_fields[name]["bg"] == "red":
                         self.input_fields[name]["bg"] = "white"
@@ -1091,7 +1133,7 @@ class PopUp:
         # Creating the PopUp window
         self.top = tk.Toplevel(root)
         self.top.title(name)
-        self.top.geometry("450x300")
+        self.top.geometry("750x450")
 
         self.parent = root
 
@@ -1121,7 +1163,7 @@ class PopUp:
             return 0
         
         # Creates the input label and widget
-        lbl = tk.Label(self.top, text=name, relief="raised")
+        lbl = tk.Label(self.top, text=name, relief="groove")
         lbl.place(relx=0, rely=0.1*self.n_inputs, relwidth=0.5, relheight=0.1)
 
         # Entry input for text
@@ -1162,6 +1204,12 @@ class PopUp:
                 input_.focus()
             self.n_inputs += 1
     
+    def setInputsValue(self, values):
+        variable_names = list(self.variables.keys())
+
+        for i, value in enumerate(values):
+            self.variables[variable_names[i]].set(value)
+
     def focusNextWindow(self, event):
         event.widget.tk_focusNext().focus()
         return("break")
@@ -1205,7 +1253,7 @@ class PopUp:
 
         # Return the inpits and call the confirm function that was set up
         self.confirm_function(self.func_args, self.variables)
-        self.parent.unbind("<Return>")
+        self.parent.unbind_all("<Return>")
         self.top.destroy()
         
 
@@ -1253,7 +1301,7 @@ class CodeWritingController:
         while len(widget_queue) > 0:
 
             top_level = False
-            current_level_widget = widget[0]
+            current_level_widget = widget_queue[0]
             found_higher = False
 
             # Find the top level parent of that widget
@@ -1284,7 +1332,7 @@ class CodeWritingController:
         else:
             template_name += "creation_"
         
-        if widget in self.code_data["standalones"].keys():
+        if widget in self.code_data["standalones"]:
             template_name += "standalone"
         else:
             template_name += "dict"
@@ -1298,14 +1346,15 @@ class CodeWritingController:
             template_name += "_img_or_cmd"
             kwargs.update({"prop": "command"})
         
-        self.addTemplate(template_name, kwargs)
+        self.addTemplate(template_name, **kwargs)
 
         
 
     def appendFunction(self, func):
         sorted_widgets = self.HierarchySort(self.code_data["funcs"][func])
 
-        self.addTemplate("func", func=func)
+        if func != "None":
+            self.addTemplate("func", func=func)
 
         for widget in sorted_widgets:
             self.appendWidget(widget)
@@ -1315,7 +1364,8 @@ class CodeWritingController:
     def addTemplate(self, template, **kwargs):
         if template in CodeWritingController.TEMPLATE_ARGS.keys():
             args = self.getArgsFromTemplate(template, **kwargs)
-            self.code += self.templates[template].format(args)
+
+            self.code += self.templates[template].format(*args)
         else:
             self.code += self.templates[template]
 
@@ -1324,10 +1374,10 @@ class CodeWritingController:
         args_names = CodeWritingController.TEMPLATE_ARGS[template]
 
         if "widget" in kwargs.keys():
-            return self.getWidgetArgs(kwargs["widget"], args_names, kwargs["prop"] if "props" in kwargs.keys() else False)
+            return self.getWidgetArgs(kwargs["widget"], args_names, kwargs["prop"] if "prop" in kwargs.keys() else False)
         
         else:
-            return self.getMiscArgs(args_names, kwargs["func"] if "props" in kwargs.keys() else False)
+            return self.getMiscArgs(args_names, kwargs["func"] if "func" in kwargs.keys() else False)
     
     def getMiscArgs(self, args, func):
         
@@ -1371,7 +1421,7 @@ class CodeWritingController:
         for arg in args:
             
             if arg == "name":
-                format_args.append(widget if "short" in args else formatName(widget))
+                format_args.append(widget if "short" in args else self.formatName(widget))
             
             elif arg == "short":
                 format_args.append(UIMaker.WIDGET_SHORTS[UIMaker.WIDGETS.index(widget_type)])
@@ -1380,40 +1430,45 @@ class CodeWritingController:
                 format_args.append(widget_type)
             
             elif arg == "parent":
-                format_args.append(self.findParentOf(widget))
+                parent_name = self.findParentOf(widget)
+                if parent_name == 'root' or parent_name in self.code_data["standalones"]:
+                    parent_name = "self." + parent_name
+                else:
+                    parent_name = "self.window_widgets['{}']".format(parent_name)
+                format_args.append(parent_name)
             
             elif arg == "x":
-                format_args.append(widget_pos[0])
-            
-            elif arg == "y":
-                format_args.append(widget_pos[1])
-            
-            elif arg == "w":
                 format_args.append(widget_pos[2])
             
-            elif arg == "h":
+            elif arg == "y":
                 format_args.append(widget_pos[3])
+            
+            elif arg == "w":
+                format_args.append(widget_pos[0])
+            
+            elif arg == "h":
+                format_args.append(widget_pos[1])
 
             elif arg == "var_name":
-                format_args.append(self.code_data["optionMenuStringVar"])
+                format_args.append(self.code_data["optionMenuStringVars"][widget])
 
             elif arg == "options":
-                format_args.append("'" + self.code_data["optionMenuVals"] + "'")
+                format_args.append("'" + self.code_data["optionMenuVals"][widget] + "'")
             
             elif arg == "props_name":
                 format_args.append(prop)
             
             elif arg == "props_value":
                 if prop == "command":
-                    format_args.append("lambda: print('Command Coming Soon..')")
+                    format_args.append(self.getCommandArgs(widget))
                 else:
-                    format_args.append("self.assets_dict[{}]".format(self.code["images"][widget]))
+                    format_args.append("self.assets_dict['{}']".format(self.code_data["images"][widget]))
             
             elif arg == "img_value":
-                format_args.append("self.assets_dict[{}]".format(self.code["images"][widget]))
+                format_args.append("self.assets_dict['{}']".format(self.code_data["images"][widget]))
 
             elif arg == "cmd_value":
-                format_args.append("lambda: print('Command Coming Soon..')")
+                format_args.append(self.getCommandArgs(widget))
 
         return format_args
 
@@ -1422,6 +1477,15 @@ class CodeWritingController:
         for parent in self.code_data["parents"]:
             if widget in self.code_data["parents"][parent]:
                 return parent
+
+    def getCommandArgs(self, widget):
+
+        widget_to_lift = self.code_data["commands"][widget]
+        
+        if widget_to_lift in self.code_data["standalones"]:
+            return "lambda:  self.{}.lift".format(widget_to_lift)
+        else:
+            return "lambda: self.window_widgets['{}'].lift".format(widget_to_lift)
 
     def formatName(self, name):
         res = ""
@@ -1435,6 +1499,7 @@ class CodeWritingController:
 
 if __name__ == "__main__":
     print("Launching the User Interface Builder...")
+    
     uimaker = UIMaker()
 
     uimaker.root.mainloop()
