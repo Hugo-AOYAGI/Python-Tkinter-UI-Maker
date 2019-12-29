@@ -1,5 +1,6 @@
 
 import tkinter as tk
+from tkinter import ttk
 import sys 
 import os
 import tkinter.messagebox as msgbox
@@ -8,6 +9,7 @@ import time
 import json
 import inspect
 import re
+import webbrowser
 from PIL import Image, ImageTk
 from ctypes import windll
 
@@ -15,17 +17,18 @@ from ctypes import windll
  TODO :
    - Touch to Select
    - Undo and Redo option
-   - Search for widget
    - Widget Tree View
+   - Edit widget (allow parent editing)
 """
+
 
 # Creates the window for the UI Builder
 class UIMaker:
 
     #CONSTANTS
-    WIDGETS = ["Frame", "LabelFrame", "Canvas", "Label", "Message", "Text", "Button", "Entry", "Listbox", "Menubutton", "OptionMenu", "Checkbutton", "Radiobutton", "Spinbox", "Menu", "PanedWindow"]
+    WIDGETS = ["Frame", "Labelframe", "Canvas", "Label", "Message", "Text", "Button", "Entry", "Listbox", "Menubutton", "OptionMenu", "Checkbutton", "Radiobutton", "Spinbox"]
 
-    PARENTS = ["Frame", "LabelFrame", "Canvas", "Tk", "PanedWindow"]
+    PARENTS = ["Frame", "Labelframe", "Canvas", "Tk"]
 
     WINDOW_PROPS = ["title", "width", "height", "xpos", "ypos"]
 
@@ -47,10 +50,17 @@ class UIMaker:
         windll.shcore.SetProcessDpiAwareness(1)
         self.root.tk.call('tk', 'scaling', 2)
 
-        imgicon = tk.PhotoImage(file=os.path.join('assets','icon.gif'))
-        self.root.tk.call('wm', 'iconphoto', self.root._w, imgicon)  
+        # ICONS
+        self.appicon = ImageTk.PhotoImage(Image.open(os.path.join("assets", "icons", "icon.png")))
+        self.deleteicon = ImageTk.PhotoImage(Image.open(os.path.join("assets", "icons", "delete.png")).resize((25, 25)))
+        self.grabicon = ImageTk.PhotoImage(Image.open(os.path.join("assets", "icons", "grab.png")).resize((30, 30)))
+        self.editicon = ImageTk.PhotoImage(Image.open(os.path.join("assets", "icons", "edit.png")).resize((30, 30)))
+        self.arrowicon = ImageTk.PhotoImage(Image.open(os.path.join("assets", "icons", "down_arrow.png")).resize((15, 12)))
 
-        self.root.tk_setPalette(background="#F9F9FF", foreground="#050560")
+
+        self.root.tk.call('wm', 'iconphoto', self.root._w, self.appicon)  
+
+        self.root.tk_setPalette(background="#F9F9FF", foreground="#000000")
 
         self.root.bind("<Configure>", lambda evt: self.changeWindowProps("width", evt))
         self.root.protocol("WM_DELETE_WINDOW", self.askCloseWindow)
@@ -70,6 +80,9 @@ class UIMaker:
         self.removed_props = ["Menubutton", "textvariable"]
 
         self.previous_search_value = "Search for widgets"
+
+        self.selecting = False
+        self.editing_widget = False
 
         self.undo_history = []
         self.redo_history = []
@@ -108,8 +121,6 @@ class UIMaker:
         self.selectPrev(0)
 
 
-
-
     # Creates the upper menu of the window
     def setupMenuBar(self):
 
@@ -144,6 +155,14 @@ class UIMaker:
 
         self.menu.add_cascade(label="Style", menu=stylemenu)
 
+        # Misc Menu: Tree View, Settings
+        miscmenu = tk.Menu(self.menu, tearoff=False)
+        miscmenu.add_command(label="Widget Tree View", command=self.showTreeView)
+        miscmenu.add_separator()
+        miscmenu.add_command(label="Info", command=self.showInfo)
+
+        self.menu.add_cascade(label="Misc", menu=miscmenu)
+
         self.root.config(menu=self.menu)
 
         # Adding shortcuts
@@ -172,7 +191,87 @@ class UIMaker:
                 widget_name = UIMaker.WIDGETS[int(i+j*(n_widgets/2))]
                 btn = tk.Button(frame, text=widget_name, command=lambda x=widget_name: self.getWidgetParameters(x), relief="groove", font=("Arial", 10), fg="#101050")
                 btn.place(relx=i/(n_widgets/2), rely=j*0.5, relwidth=1/(n_widgets/2), relheight=0.5)
-    
+
+    def showInfo(self):
+        self.info_win = tk.Toplevel(self.root)
+        self.info_win.geometry("800x600")
+
+        title = tk.Label(self.info_win, text="INFORMATION", font=("Arial", 20))
+        title.place(relwidth=1, relheight=0.1)
+
+        git_title = tk.Label(self.info_win, text="Github : ", font=("Arial", 13, "bold"))
+        git_title.place(relx=0, rely=0.15, relwidth=0.3, relheight=0.05)
+
+        path = "https://github.com/Hugo-AOYAGI/Python-Tkinter-UI-Maker"
+
+        git_link = tk.Label(self.info_win, text="github.com/Hugo-AOYAGI/Python-Tkinter-UI-Maker", fg="blue")
+        git_link.place(relx=0.3, rely=0.15, relwidth=0.7, relheight=0.05)
+        git_link.bind("<Button-1>", lambda evt: webbrowser.open(path, new=2))
+
+        credits_title = tk.Label(self.info_win, text="Credits : ", font=("Arial", 13, "bold"))
+        credits_title.place(relx=0, rely=0.20, relwidth=0.3, relheight=0.05)
+
+        credits_icons = tk.Label(self.info_win, text="Icons by Hawcons (http://www.hawcons.com) ")
+        credits_icons.place(relx=0.3, rely=0.20, relwidth=0.7, relheight=0.05)
+
+    def showTreeView(self):
+        self.tree_view_win = tk.Toplevel(self.root)
+        self.tree_view_win.geometry("800x600")
+
+        style = ttk.Style(self.tree_view_win)
+        style.configure('Treeview', rowheight=25) 
+
+        self.treeview = ttk.Treeview(self.tree_view_win, selectmode="browse") 
+        self.treeview["columns"]=("one")
+
+        self.vsb = tk.Scrollbar(self.tree_view_win, orient="vertical", command=self.treeview.yview)
+        self.vsb.place(x=780, rely=0, relheight=1, width=20)
+
+        self.treeview.column("#0", width=650, minwidth=150, stretch=tk.NO)
+        self.treeview.column("one", width=150, minwidth=100, stretch=tk.NO)
+
+        self.treeview.heading("#0", text="Name", anchor=tk.W)
+        self.treeview.heading("one", text="Type", anchor=tk.W)
+        
+        index = 0
+
+        root = self.treeview.insert("", "end", "root", text="root", values=("MainWindow"))
+
+        next_level_parents = []
+        current_level_parents = [(root, 'root')]
+        lowest = False
+
+        while not lowest:
+            if len(list(self.code["parents"].keys())) == 0:
+                break
+            for folder, parent in current_level_parents:
+                for widget in self.code["parents"][parent]:
+                    if widget in list(self.code["parents"].keys()):
+                        new_folder = self.treeview.insert(folder, "end", index, text=widget, values=self.code["types"][widget])
+                        next_level_parents.append((new_folder, widget))
+                        index += 1
+                    else:
+                        self.treeview.insert(folder, "end", index, text=widget, values=self.code["types"][widget])
+                        self.treeview.see(index)
+                        index += 1
+            if next_level_parents == []:
+                lowest = True
+            current_level_parents = next_level_parents
+            next_level_parents = []
+                    
+        self.treeview.place(relx=0, rely=0, relwidth=1, relheight=1)
+
+        self.tree_view_win.bind("<Configure>", self.updateTreeViewSize)
+
+    def updateTreeViewSize(self, *args):
+        self.treeview.column("#0", width=int(0.8*args[0].width))
+        self.treeview.column("one", width=int(0.2*args[0].width))
+
+        if args[0].width > 100:
+            self.vsb.place_forget()
+            self.vsb.place(x=args[0].width-20, y=0, height=args[0].height, width=20)
+        
+
     # Ask the user to add a new assets folder
     def addAssetsFolder(self, dir_ = 0):
         
@@ -212,7 +311,7 @@ class UIMaker:
             msgbox.showwarning("warning","Please close or confirm the previous Pop Up before opening another one.")
             return 0
         
-        self.pop_win = PopUp(self.root, "Create Function", self.createNewFunc)
+        self.pop_win = PopUp(self.root, "Create Function",self, self.createNewFunc)
         self.pop_win.addCloseFunc(self.pop_up_close)
 
         self.pop_win.addInput("Entry", "Function Name", self.code["funcs"].keys())
@@ -241,21 +340,29 @@ class UIMaker:
 
         # Creating the option menu
         self.option_menu = tk.OptionMenu(frame, self.selected_widget_name, "root")
-        self.option_menu.configure(relief="groove")
-        self.option_menu.place(relx=0, rely=0.1, relwidth=0.6, relheight=0.05)
+        self.option_menu.configure(relief="groove", indicatoron=0, image=self.arrowicon, compound="right")
+        self.option_menu.place(relx=0, rely=0.1, relwidth=0.55, relheight=0.05)
         self.selected_widget_name.trace_add("write", self.selectWidget)
 
+        # Creating the search bar
         self.search = tk.StringVar()
         self.search.set("Search for widgets")
         self.search.trace_add("write", self.searchUpdate)
 
         self.search_bar = tk.Entry(frame, textvariable=self.search, font=("Arial", 8), fg="#909090")
-        self.search_bar.place(relx=0.6, rely=0.1, relwidth=0.4, relheight=0.05)
+        self.search_bar.place(relx=0.55, rely=0.1, relwidth=0.35, relheight=0.05)
 
         self.search_results = tk.Frame(frame, bg="red")
         self.search_results.place(relx=0.5, rely=0.15, relwidth=0.5, relheight=0.2)
 
         self.searchUpdate()
+
+        # Touch to select button
+        
+        self.touch_select_btn = tk.Button(frame, command=self.touchToSelect,image=self.grabicon, relief="groove")
+        self.touch_select_btn.place(relx=0.9, rely=0.1, relheight=0.05, relwidth=0.1)
+
+        self.touchToSelectSetup()
 
         # Creating the widget action bar: delete, copy
         action_bar = tk.Frame(frame)
@@ -263,17 +370,13 @@ class UIMaker:
 
         action_bar_font = ("Arial", 7)
 
-        self.delete_btn = tk.Button(action_bar, text="Delete", command=self.deleteWidget, font=action_bar_font, relief="groove")
-        self.delete_btn.place(relx=0, rely=0, relwidth=0.25, relheight=1)
-
         self.save_style_btn = tk.Button(action_bar, text="Save Styling", command=self.askSaveStyling, font=action_bar_font,relief="groove")
-        self.save_style_btn.place(relx=0.25, rely=0, relwidth=0.25, relheight=1)
 
-        self.style_btn = tk.Button(action_bar, text="Chose Styling", command=self.askStyling, font=action_bar_font, relief="groove")
-        self.style_btn.place(relx=0.50, rely=0, relwidth=0.25, relheight=1)
+        self.style_btn = tk.Button(action_bar, text="Choose Styling", command=self.askStyling, font=action_bar_font, relief="groove")
 
-        self.edit_btn = tk.Button(action_bar, text="Edit", command=self.editWidget, font=action_bar_font, relief="groove")
-        self.edit_btn.place(relx=0.75, rely=0, relwidth=0.25, relheight=1)
+        self.edit_btn = tk.Button(action_bar, command=self.askEditWidget, relief="groove", image=self.editicon)
+
+        self.delete_btn = tk.Button(action_bar, command=self.deleteWidget, relief="groove", image=self.deleteicon)
 
         # Creating a canvas in order to add a scrollbar
         self.props_canv = tk.Canvas(frame, scrollregion = (0, 0, 100, 2000), yscrollincrement="2")
@@ -353,11 +456,63 @@ class UIMaker:
         self.selectWidget()
         self.search.set("")
         self.searchUpdate()
-        
 
     def setPlaceholder(self):
         self.search_bar.configure(fg="#909090")
         self.search.set("Search for widgets")
+
+    def touchToSelectSetup(self):
+
+        # Creating screen blocker
+        self.sb_left = tk.Frame(self.root, bg="#FAFAFA", relief="groove")
+        self.sb_bottom = tk.Frame(self.root, bg="#FAFAFA", relief="groove")
+
+        # Creation stop select button
+        self.stop_touch_select_btn = tk.Button(self.sb_left, command=self.touchToSelectStop,image=self.grabicon, relief="groove")
+        self.stop_touch_select_btn.place(relx=0.9, rely=0.1, relheight=0.05, relwidth=0.1)
+
+        # Adding label
+        title = tk.Label(self.sb_left, text="Click on a widget\nto select it.", bg="#FAFAFA", font=('Arial', 16))
+        title.place(relx=0.1, rely=0.05, relheight=0.1, relwidth=0.8)
+        
+    def touchToSelect(self):
+
+        self.root.configure(cursor="crosshair")
+        
+        self.sb_left.place(relx=0, rely=0, relwidth=0.25, relheight=1)
+        self.sb_bottom.place(relx=0.25, rely=0.8, relwidth=0.75, relheight=0.2)
+
+        self.selecting = True
+        
+        for widget in list(self.user_widgets.keys()):
+            if widget == "root":
+                self.ui.bind("<Button-1>", lambda evt, x=widget:self.touchToSelectPress(x, evt))
+            else:
+                self.user_widgets[widget].bind("<Button-1>", lambda evt, x=widget:self.touchToSelectPress(x, evt))
+
+
+    def touchToSelectStop(self):
+        self.sb_left.place_forget()
+        self.sb_bottom.place_forget()
+        self.root.configure(cursor="arrow")
+
+        # Unbinding all mouse clicks
+        for widget in list(self.user_widgets.keys()):
+            if widget == "root":
+                self.ui.unbind("<Button-1>")
+            else:
+                self.user_widgets[widget].unbind("<Button-1>")
+
+        self.selecting = False
+
+    def touchToSelectPress(self, widget, *args):
+        self.selecting = False
+
+        self.selected_widget_name.set(widget)
+        self.selectWidget()
+
+        self.touchToSelectStop()
+        
 
     def _on_mousewheel(self, event):
         self.props_canv.yview_scroll(int(-5*(event.delta/120)), "units")
@@ -467,8 +622,73 @@ class UIMaker:
                 btn = tk.Button(self.props_frame, text=name, command=lambda x=name: self.widgetCommandAsk(x), relief="groove")
                 btn.place(relx=0, rely=0.02*(i+last_i), relwidth=1, relheight=0.02)
             
-    def editWidget(self):
-        pass
+    # Create pop up to get new widget properties (name, parent ..etc)
+    def askEditWidget(self, widget = False):
+        widget_name = self.selected_widget_name.get() if not widget else widget
+
+        type_ = self.code["types"][widget_name]
+
+        option_menu_args = []
+        if type_ == "OptionMenu":
+            option_menu_args = [self.code["optionMenuStringVars"][widget_name], self.code["optionMenuVals"][widget_name]]
+
+        # Create parameters pop_up
+        self.getWidgetParameters(type_)
+
+        # Fill in the current values for thoses parameters
+        self.pop_win.setInputsValues([widget_name, 
+                                    self.findParent(widget_name), 
+                                    int(widget_name in self.code["standalones"]),
+                                    self.findCreationFunc(widget_name)
+                                    ] + option_menu_args)
+        
+        # Allowing the same name for the widget
+        self.pop_win.prohibited_vals["Widget Name"].remove(widget_name)
+
+        # Blocking the parent option menu
+        sb = tk.Label(self.pop_win.top, text="Parent: "+self.findParent(widget_name)+" (Cannot be edited)", relief="groove")
+        sb.place(relx=0, rely=0.1, relwidth=1, relheight=0.1)
+
+        self.pop_win.confirm_function = self.editWidget
+        self.pop_win.func_args = [widget_name, self.findCreationFunc(widget_name)]
+        
+    # Edit the code variables of a widget from pop_up inputs
+    def editWidget(self, arguments, variables, *args):
+        
+        self.pop_win = 0
+
+        widget_name, previous_func = arguments[0], arguments[1]
+
+        # Getting the new_name of the widget
+        new_name = variables["Widget Name"].get()
+
+        # If the name was changed, change the name in all the self.code dictionaries if lists
+        if new_name != widget_name:
+            for category in self.code.keys():
+                if isinstance(self.code[category], (list)):
+                    self.code[category] = [new_name if el == widget_name else el for el in self.code[category]]
+                else:
+                    for key in list(self.code[category].keys()):
+                        if key == widget_name:
+                            # Copy the previous value into a new key-value pair and delete the previous one
+                            self.code[category][new_name] = self.code[category][key]  
+                            del self.code[category][key]
+        
+            self.user_widgets[new_name] = self.user_widgets[widget_name]
+            del self.user_widgets[widget_name]
+
+        # Changing the function
+        self.code["funcs"][previous_func].remove(widget_name)
+        self.code["funcs"][variables["Created in Function"].get()].append(new_name)
+
+        # Changing the standalone value
+        if new_name in self.code["standalones"] and not variables["Is Standalone"].get():
+            self.code["standalones"].remove(new_name)
+        elif new_name not in self.code["standalones"] and variables["Is Standalone"].get():
+            self.code["standalones"].append(new_name)
+
+        self.refreshOptionMenu()
+        
     
     def widgetImageAsk(self, name):
         # Checks if a pop up window is already opened
@@ -481,7 +701,7 @@ class UIMaker:
             return 0
         
 
-        self.pop_win = PopUp(self.root, "Choose an Image for the widget", self.updateWidgetImage, name)
+        self.pop_win = PopUp(self.root, "Choose an Image for the widget", self, self.updateWidgetImage, name)
         self.pop_win.addInput("OptionMenu", "Widget Image", self.assets_images.keys())
         self.pop_win.addCloseFunc(self.pop_up_close)
 
@@ -491,7 +711,7 @@ class UIMaker:
             msgbox.showwarning("Warning","Please close or confirm the previous Pop Up before opening another one.")
             return 0
         
-        self.pop_win = PopUp(self.root, "Choose a command for the widget", self.updateWidgetCommand, name)
+        self.pop_win = PopUp(self.root, "Choose a command for the widget", self, self.updateWidgetCommand, name)
         self.pop_win.addInput("OptionMenu", "Widget to lift", self.user_widgets.keys())
         self.pop_win.addCloseFunc(self.pop_up_close)
     
@@ -523,7 +743,7 @@ class UIMaker:
         self.pop_win = 0
         
 
-    def deleteWidget(self, widg = False):
+    def deleteWidget(self, widg = False, *args):
         to_delete = self.selected_widget_name.get() if not widg else widg
         if to_delete == "root":
             msgbox.showwarning('Warning', "Can't delete the root window or else you won't have an app")
@@ -537,24 +757,33 @@ class UIMaker:
             if self.user_widgets[name] in children:
                 keys_to_kill.append(name)
         
+        keys_to_kill.append(to_delete)
+
         for key in keys_to_kill:
             self.user_widgets[key].destroy()
             del self.user_widgets[key]
 
-        # Delete the widget from all the dictionaries
-        for parent in self.code["parents"]:
-            if to_delete in self.code["parents"][parent]:
-                index = self.code["parents"][parent].index(to_delete)
-                del self.code["parents"][parent][index]
+            # Delete the widget from all the dictionaries
+            for parent in self.code["parents"]:
+                if key in self.code["parents"][parent]:
+                    index = self.code["parents"][parent].index(key)
+                    del self.code["parents"][parent][index]
 
-        for func in self.code["funcs"]:
-            if to_delete in self.code["funcs"][func]:
-                index = self.code["funcs"][func].index(to_delete)
-                del self.code["funcs"][func][index]
+            for func in self.code["funcs"]:
+                if key in self.code["funcs"][func]:
+                    index = self.code["funcs"][func].index(key)
+                    del self.code["funcs"][func][index]
+            
+            del self.code["types"][key]
+            if key in self.code["optionMenuVals"].keys():
+                del self.code["optionMenuVals"][key]
+                del self.code["optionMenuStringVars"][key]
+                del self.stringVars[key]
 
-        # Delete the widget itself
-        self.user_widgets[to_delete].destroy()
-        del self.user_widgets[to_delete]
+            if key in self.code["images"].keys():
+                del self.code["images"][key]
+            if key in self.code["commands"].keys():
+                del self.code["commands"][key]
 
         # Reset the widget option menu
         self.selected_widget_name.set("root")
@@ -702,16 +931,15 @@ class UIMaker:
             self.user_widgets[widg_name][prop] = sheet["styling"][prop]
         self.reloadProperties("relwidth", widg_name, sheet["position"][0], sheet["position"][1], sheet["position"][2], sheet["position"][3])
 
-    def findCreationFunc(self, widget):
-        for func in self.code["funcs"].keys():
-            if widget in self.code["funcs"][func]:
-                return func
-            
     def findParent(self, widget):
         for parent in self.code["parents"].keys():
             if widget in self.code["parents"][parent]:
                 return parent
     
+    def findCreationFunc(self, widget):
+        for func in self.code["funcs"].keys():
+            if widget in self.code["funcs"][func]:
+                return func
 
     def askSaveStyling(self):
         # Checks if a pop up window is already opened
@@ -722,7 +950,7 @@ class UIMaker:
         widget_name = self.selected_widget_name.get()
 
         # Asking for the class name
-        self.pop_win = PopUp(self.root, "Widget Styling", self.saveStyling, widget_name)
+        self.pop_win = PopUp(self.root, "Widget Styling", self, self.saveStyling, widget_name)
         self.pop_win.addCloseFunc(self.pop_up_close)
         self.pop_win.addInput("Entry", "Class Name", self.style_sheet.keys())
 
@@ -761,7 +989,7 @@ class UIMaker:
         
         widget_name = self.selected_widget_name.get()
 
-        self.pop_win = PopUp(self.root, "Widget Styling", self.applyStyling, widget_name)
+        self.pop_win = PopUp(self.root, "Widget Styling", self, self.applyStyling, widget_name)
         self.pop_win.addCloseFunc(self.pop_up_close)
         self.pop_win.addInput("OptionMenu", "Styling Class", self.style_sheet.keys())
     
@@ -857,9 +1085,12 @@ class UIMaker:
 
         controller.addTemplate("class")
 
+        if self.assets_path != "None":
+            controller.addTemplate("assets_call")
+
         controller.appendFunction("None")
 
-        for func in list(filter(lambda x: x!="None", list(self.code["funcs"].keys()))):
+        for func in list(filter(lambda x: x!="None", variables["sorter_list"])):
             controller.addTemplate("func_call", func=func)
         
         controller.addTemplate("sheet_load_func")
@@ -888,7 +1119,7 @@ class UIMaker:
 
         path = askfile.asksaveasfile()
 
-        self.pop_win = PopUp(self.root, "Test", self.writeCode, path)
+        self.pop_win = PopUp(self.root, "Test", self, self.writeCode, path)
         self.pop_win.addCloseFunc(self.pop_up_close)
         if len(self.code["funcs"].keys()) > 2:
             sorter_args =  ["Sort the functions by order of creation\n (This can impact the way the app works !)", list(filter(lambda x: x!= "None",self.code["funcs"].keys()))]
@@ -898,6 +1129,12 @@ class UIMaker:
     
     # Selects the widget which was clicked on or which was selected in the drop menu.
     def selectWidget(self, *args):
+
+        if self.selecting:
+            if self.prev:
+                self.selected_widget_name.set(self.prev)
+            return 0
+
         # Checks if selected widget is the root window
         # Prevent widget selection if there are problems
         if self.problem_count > 0:
@@ -912,10 +1149,10 @@ class UIMaker:
                 self.style_btn.place_forget()
                 self.edit_btn.place_forget()
             else:
-                self.delete_btn.place(relx=0, rely=0, relwidth=0.25, relheight=1)
-                self.save_style_btn.place(relx=0.25, rely=0, relwidth=0.25, relheight=1)
-                self.style_btn.place(relx=0.50, rely=0, relwidth=0.25, relheight=1)
-                self.edit_btn.place(relx=0.75, rely=0, relwidth=0.25, relheight=1)
+                self.delete_btn.place(relx=0.9, rely=0, relwidth=0.1, relheight=1)
+                self.save_style_btn.place(relx=0, rely=0, relwidth=0.4, relheight=1)
+                self.style_btn.place(relx=0.4, rely=0, relwidth=0.4, relheight=1)
+                self.edit_btn.place(relx=0.8, rely=0, relwidth=0.1, relheight=1)
             self.getWidgetProperties()
     
     def selectNext(self, evt):
@@ -938,14 +1175,22 @@ class UIMaker:
     
     # Places the widget that was selected in the widget selection bar.
     def placeWidget(self, name, variables):
-        
+
         widget_name = variables["Widget Name"].get()
         args = ""
 
+        # Handling option menu case
         if name == 'OptionMenu':
+            # Updating dictionaries
             self.stringVars.update({variables["StringVar Name"].get(): tk.StringVar()})
-            self.code["optionMenuVals"].update({widget_name: "','".join(variables['Default Values'].get().split(","))})
-            self.code["optionMenuStringVars"].update({widget_name: variables["StringVar Name"].get()})
+
+            # Checking if the widget is already registered in the dictionary
+            if widget_name in list(self.code["optionMenuVals"].keys()):
+                self.code["optionMenuVals"][widget_name] = "','".join(variables['Default Values'].get().split(","))
+                self.code["optionMenuStringVars"][widget_name] = variables["StringVar Name"].get()
+            else:
+                self.code["optionMenuVals"].update({widget_name: "','".join(variables['Default Values'].get().split(","))})
+                self.code["optionMenuStringVars"].update({widget_name: variables["StringVar Name"].get()})
             args = ", self.stringVars[variables['StringVar Name'].get()], '{}'".format("','".join(variables['Default Values'].get().split(",")))
             
         parent = "self.ui" if variables["Widget Parent"].get() == "root" else "self.user_widgets[variables['Widget Parent'].get()]"
@@ -954,7 +1199,8 @@ class UIMaker:
         if variables["Widget Parent"].get() not in self.code["parents"].keys():
             self.code["parents"].update({variables["Widget Parent"].get(): []})
 
-        self.code["parents"][variables["Widget Parent"].get()].append(widget_name) 
+        if widget_name not in self.code["parents"][variables["Widget Parent"].get()]:
+            self.code["parents"][variables["Widget Parent"].get()].append(widget_name) 
 
         # Creating the widget
         widget = eval("tk.{}({}{})".format(name, parent, args))
@@ -962,8 +1208,10 @@ class UIMaker:
 
         # Adding the widget in the dictionary
         self.user_widgets.update({widget_name: widget})
-        self.code["types"].update({widget_name: name})
-        self.code["widget_position"].update({widget_name: (0, 0, 0.2, 0.2)})
+        if widget_name not in list(self.code["types"].keys()):
+            self.code["types"].update({widget_name: name})
+        if widget_name not in list(self.code["widget_position"].keys()):
+            self.code["widget_position"].update({widget_name: (0, 0, 0.2, 0.2)})
 
         # Add the widget properties to the default widget properties
         if name not in self.default_widget_properties.keys():
@@ -976,10 +1224,10 @@ class UIMaker:
             self.code["standalones"].append(widget_name)
 
         func_name = variables["Created in Function"].get()
-        self.code["funcs"][func_name].append(widget_name)
+        if widget_name not in list(self.code["funcs"][func_name]):
+            self.code["funcs"][func_name].append(widget_name)
 
         self.refreshOptionMenu()
-
 
         del self.pop_win
         self.pop_win = False
@@ -987,6 +1235,7 @@ class UIMaker:
     def pop_up_close(self):
         self.pop_win.top.destroy()
         self.pop_win = False
+        self.editing_widget = False
 
     # Spawns PopUp Window to ask for widget parameters
     def getWidgetParameters(self, name):
@@ -994,7 +1243,7 @@ class UIMaker:
             msgbox.showwarning("warning","Please close or confirm the previous Pop Up before opening another one.")
             return 0
         # Create the pop up window
-        self.pop_win = PopUp(self.root, "Widget Creation : {}".format(name), self.placeWidget, name)
+        self.pop_win = PopUp(self.root, "Widget Creation : {}".format(name), self, self.placeWidget, name)
         self.pop_win.addCloseFunc(self.pop_up_close)
         
         # Adds the name input field
@@ -1128,14 +1377,18 @@ class PopUp:
 
     INPUTS_PRESETS = ["Entry", "OptionMenu", "Checkbutton", "sorter"]
 
-    def __init__(self, root, name, confirm_function, func_args = []):
+    def __init__(self, root, name, app, confirm_function, func_args = []):
 
         # Creating the PopUp window
         self.top = tk.Toplevel(root)
         self.top.title(name)
         self.top.geometry("750x450")
 
+        self.app = app
+
         self.parent = root
+
+        self.top.tk.call('wm', 'iconphoto', self.top._w, self.app.appicon)  
 
         # VARIABLES
         self.variables = {}
@@ -1175,6 +1428,7 @@ class PopUp:
         # Option menu to chose from multiple options
         elif _type == "OptionMenu":
             input_ = tk.OptionMenu(self.top, self.variables[name], "")
+            input_.configure(relief="groove", indicatoron=0, image=self.app.arrowicon, compound="right")
             input_['menu'].delete(0, 'end')
             # Adding the options given in the arguments
             for option in arg:
@@ -1204,7 +1458,7 @@ class PopUp:
                 input_.focus()
             self.n_inputs += 1
     
-    def setInputsValue(self, values):
+    def setInputsValues(self, values):
         variable_names = list(self.variables.keys())
 
         for i, value in enumerate(values):
@@ -1480,12 +1734,12 @@ class CodeWritingController:
 
     def getCommandArgs(self, widget):
 
-        widget_to_lift = self.code_data["commands"][widget]
+        widget_to_lift = self.code_data["commands"][widget][0]
         
         if widget_to_lift in self.code_data["standalones"]:
-            return "lambda:  self.{}.lift".format(widget_to_lift)
+            return "lambda: self.{}.lift()".format(widget_to_lift)
         else:
-            return "lambda: self.window_widgets['{}'].lift".format(widget_to_lift)
+            return "lambda: self.window_widgets['{}'].lift()".format(widget_to_lift)
 
     def formatName(self, name):
         res = ""

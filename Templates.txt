@@ -32,7 +32,10 @@ class TkinterApp:
 
 		# Calling the window setup functions
 		self.loadStyleSheet()
+
+==>:assets_call<<<
 		self.loadAssets()
+
 ==>:func_call<<<
 
 		self.{}()
