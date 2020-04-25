@@ -15,10 +15,8 @@ from ctypes import windll
 
 """
  TODO :
-   - Touch to Select
    - Undo and Redo option
-   - Widget Tree View
-   - Edit widget (allow parent editing)
+   - Change widget name in parent dict on edit
 """
 
 
@@ -680,6 +678,11 @@ class UIMaker:
         # Changing the function
         self.code["funcs"][previous_func].remove(widget_name)
         self.code["funcs"][variables["Created in Function"].get()].append(new_name)
+        
+        # Changing the parent
+        parent = self.findParent(widget_name)
+        self.code["parents"][parent].remove(widget_name)
+        self.code["parents"][parent].append(new_name)
 
         # Changing the standalone value
         if new_name in self.code["standalones"] and not variables["Is Standalone"].get():
@@ -854,13 +857,15 @@ class UIMaker:
             return
 
         with open(path_.name, "r") as ui_file:
+
             # Load the json file
             ui_dict = json.load(ui_file)
-            
+
             # Update the window variables
             self.code = ui_dict["code"]
             self.root_options = ui_dict["root_options"]
             self.changeWindowSize()
+
 
             # Add the assets folder
             self.addAssetsFolder(ui_dict["assets_path"])
@@ -874,14 +879,12 @@ class UIMaker:
             for widg in to_delete:
                 self.deleteWidget(widg)
 
-
             # Go through all the layers and hierarchy of the widget tree
-            while len(seen_widgets) < len(ui_dict["widget_names"]):
-
-                # Loop through the parents of the current layer                
+            while len(seen_widgets) < len(ui_dict["widget_names"]) and layer_parents != []:
+                # Loop through the parents of the current layer   
+                new_layer_parents = [] 
                 for parent in layer_parents:
-                    new_layer_parents = []
-                    if parent in self.code["parents"]:
+                    if parent in list(self.code["parents"].keys()):
                         
                         # Loop through the children of that parent
                         for widget in self.code["parents"][parent]:
@@ -914,10 +917,11 @@ class UIMaker:
                             
                             # Place the widget
                             self.placeWidget(self.code["types"][widget], variables)
+
                 
                 # Setting up the new layer
                 layer_parents = new_layer_parents
-            
+
             for widget in filter(lambda x: x!="root", self.user_widgets.keys()):
                 self.updateWidgetPropertiesFromSheet(widget, ui_dict["sheet"][widget])
                 # Add command if there was one
