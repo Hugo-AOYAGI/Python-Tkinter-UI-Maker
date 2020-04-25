@@ -10,3 +10,7 @@ You can organise your code in several functions and decide if your widget is a s
 Furthermore, all the widget properties are stored in a json file : **the style sheet.**
 
 There may be a lot of bugs within the app. Please raise an issue if you find one so it can be fixed.
+
+## Example
+
+![Example](https://raw.githubusercontent.com/Hugo-AOYAGI/Python-Tkinter-UI-Maker/master/assets/example_screenshot.png)
